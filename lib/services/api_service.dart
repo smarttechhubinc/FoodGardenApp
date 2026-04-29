@@ -1629,9 +1629,32 @@ Future<Map<String, dynamic>> createProductRequest({
 }
 
 // Check if user has an existing request for a product
+// Future<Map<String, dynamic>> getUserProductRequest(String productId) async {
+//   try {
+//     print('🔄 Checking existing request for product: $productId');
+    
+//     final response = await http.get(
+//       Uri.parse('$baseUrl/api/products/$productId/my-request'),
+//       headers: headers,
+//     );
+
+//     print('📥 Response status: ${response.statusCode}');
+//     print('📥 Response body: ${response.body}');
+
+//     return jsonDecode(response.body);
+//   } catch (e) {
+//     print('❌ Check request error: $e');
+//     return {
+//       'success': false,
+//       'error': 'Connection error: $e',
+//     };
+//   }
+// }
+
+  // Get user's existing request for a product (works for requester AND owner)
 Future<Map<String, dynamic>> getUserProductRequest(String productId) async {
   try {
-    print('🔄 Checking existing request for product: $productId');
+    print('🔄 Getting user request for product: $productId');
     
     final response = await http.get(
       Uri.parse('$baseUrl/api/products/$productId/my-request'),
@@ -1641,12 +1664,21 @@ Future<Map<String, dynamic>> getUserProductRequest(String productId) async {
     print('📥 Response status: ${response.statusCode}');
     print('📥 Response body: ${response.body}');
 
-    return jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      return {
+        'success': false,
+        'error': 'Failed to fetch request',
+        'request': null
+      };
+    }
   } catch (e) {
-    print('❌ Check request error: $e');
+    print('❌ Get user request error: $e');
     return {
       'success': false,
       'error': 'Connection error: $e',
+      'request': null
     };
   }
 }
