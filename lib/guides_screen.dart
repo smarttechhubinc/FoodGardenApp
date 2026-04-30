@@ -116,34 +116,116 @@ class _GuidesScreenState extends State<GuidesScreen> {
     }
   }
 
+  // UPDATED: Get AI suggestion with dialog
   Future<void> _getAISuggestionForQuestion() async {
-    if (_questionController.text.trim().isEmpty) return;
+    if (_questionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a topic first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isAILoading = true;
     });
 
     try {
-      final suggestion = await _aiService.suggestAnswer(_questionController.text);
-      setState(() {
-        _aiResponse = suggestion;
-        _showAIAssistant = true;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('AI suggestion ready! Check the AI Assistant.'),
-          backgroundColor: const Color(0xFF39AC86),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      final suggestion = await _aiService.suggestPostContent(_questionController.text);
+      _showSuggestionDialog(suggestion);
     } catch (e) {
       print('Error getting AI suggestion: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       setState(() {
         _isAILoading = false;
       });
     }
+  }
+
+  // NEW: Show suggestion dialog
+  void _showSuggestionDialog(String suggestion) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.auto_awesome, color: Color(0xFF39AC86)),
+            SizedBox(width: 8),
+            Text('AI Post Suggestion'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF39AC86).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  suggestion,
+                  style: const TextStyle(height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '💡 Tip: You can edit the suggestion before posting',
+                style: TextStyle(fontSize: 12, color: Color(0xFF5C8A7A)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Parse and use the suggestion
+              String postContent = suggestion;
+              
+              // Try to extract title if present
+              if (suggestion.contains('Title:') || suggestion.contains('TITLE:')) {
+                final lines = suggestion.split('\n');
+                for (var line in lines) {
+                  if (line.toLowerCase().startsWith('title:')) {
+                    postContent = line.substring(6).trim();
+                    break;
+                  }
+                }
+              }
+              
+              _questionController.text = postContent;
+              Navigator.pop(context);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Suggestion added! You can now edit and post.'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF39AC86),
+            ),
+            child: const Text('Use Suggestion'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadHardinessZones() async {
@@ -562,7 +644,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
   }
 
   void _showAskQuestionDialog() {
-    // Reset image selection when opening dialog
     _removeSelectedImage();
     
     showDialog(
@@ -576,7 +657,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Category Dropdown
                   DropdownButtonFormField<String>(
                     value: _selectedCategory == 'All' ? 'Vegetables' : _selectedCategory,
                     items: _categories.where((c) => c != 'All').map((category) {
@@ -597,7 +677,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Question Text Field
                   TextField(
                     controller: _questionController,
                     maxLines: 4,
@@ -610,10 +689,15 @@ class _GuidesScreenState extends State<GuidesScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // AI Suggestion Button
                   ElevatedButton.icon(
-                    onPressed: _getAISuggestionForQuestion,
-                    icon: const Icon(Icons.auto_awesome, size: 18),
+                    onPressed: _isAILoading ? null : _getAISuggestionForQuestion,
+                    icon: _isAILoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.auto_awesome, size: 18),
                     label: const Text('Get AI Suggestion'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF39AC86),
@@ -622,7 +706,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Image Picker Section (Like Facebook)
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey[300]!),
@@ -630,7 +713,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                     ),
                     child: Column(
                       children: [
-                        // Image preview if selected
                         if (_selectedImageBytes != null)
                           Stack(
                             children: [
@@ -670,7 +752,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                             ],
                           ),
                         
-                        // Add Photo Button
                         if (_selectedImageBytes == null)
                           InkWell(
                             onTap: () async {
@@ -706,7 +787,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                             ),
                           ),
                         
-                        // Change Photo Button
                         if (_selectedImageBytes != null)
                           Padding(
                             padding: const EdgeInsets.all(8),
@@ -1004,7 +1084,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
         SingleChildScrollView(
           child: Column(
             children: [
-              // User Location Card
               Container(
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(16),
@@ -1083,7 +1162,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                 ),
               ),
 
-              // Interactive Map (Works on both Web and Mobile)
               Container(
                 height: 350,
                 margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1128,7 +1206,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                 ),
               ),
 
-              // Zone Cards
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -1287,6 +1364,14 @@ class _GuidesScreenState extends State<GuidesScreen> {
                             },
                             icon: const Icon(Icons.close, color: Colors.white, size: 20),
                           ),
+                          IconButton(
+                            onPressed: _isAILoading ? null : () async {
+                              if (_aiQuestionController.text.isNotEmpty) {
+                                await _askAIAssistant();
+                              }
+                            },
+                            icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+                          ),
                         ],
                       ),
                     ),
@@ -1367,7 +1452,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
   Widget _buildCommunitySection(bool isDarkMode) {
     return Column(
       children: [
-        // Category Filter Chips
         SizedBox(
           height: 44,
           child: ListView.builder(
@@ -1399,7 +1483,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
           ),
         ),
         
-        // Posts Feed
         Expanded(
           child: _isLoadingQuestions
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF39AC86)))
@@ -1433,7 +1516,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Post Header (Author info)
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -1509,7 +1591,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
             ),
           ),
           
-          // Post Content (Text)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: GestureDetector(
@@ -1525,7 +1606,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
             ),
           ),
           
-          // Post Image (if exists) - Like Facebook style
           if (question.imageUrl != null && question.imageUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             GestureDetector(
@@ -1555,12 +1635,10 @@ class _GuidesScreenState extends State<GuidesScreen> {
             ),
           ],
           
-          // Post Actions (Like, Comment, etc.)
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Like button
                 GestureDetector(
                   onTap: () => _likeQuestion(question),
                   child: Row(
@@ -1583,7 +1661,6 @@ class _GuidesScreenState extends State<GuidesScreen> {
                 ),
                 const SizedBox(width: 24),
                 
-                // Comment button
                 GestureDetector(
                   onTap: () => _showQuestionDetail(question),
                   child: Row(
@@ -1801,7 +1878,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
       ),
       child: Column(
         children: [
-          // Drag handle
           Container(
             margin: const EdgeInsets.only(top: 12),
             width: 40,
@@ -1812,14 +1888,12 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
             ),
           ),
           
-          // Post content
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Author info
                   Row(
                     children: [
                       widget.question.authorImage.isNotEmpty
@@ -1886,7 +1960,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Post text
                   Text(
                     widget.question.title,
                     style: TextStyle(
@@ -1897,7 +1970,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
                     ),
                   ),
                   
-                  // Post image
                   if (widget.question.imageUrl != null && widget.question.imageUrl!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     ClipRRect(
@@ -1920,7 +1992,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
                   
                   const SizedBox(height: 24),
                   
-                  // Answers section
                   Row(
                     children: [
                       const Icon(Icons.chat_bubble_outline, size: 18, color: Color(0xFF5C8A7A)),
@@ -1937,7 +2008,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
                   ),
                   const Divider(height: 24),
                   
-                  // Comments list
                   _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _answers.isEmpty
@@ -2048,7 +2118,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
             ),
           ),
           
-          // Comment input
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -2108,6 +2177,8 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 
 
 
+
+
 // import 'dart:convert';
 // import 'dart:io';
 // import 'dart:typed_data';
@@ -2152,7 +2223,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //   String _selectedCategory = 'All';
 //   final List<String> _categories = ['All', 'Vegetables', 'Fruits', 'Herbs', 'Pests', 'Soil', 'Watering'];
   
-//   // Image upload
+//   // Image upload for new post
 //   XFile? _selectedImage;
 //   Uint8List? _selectedImageBytes;
 //   bool _isUploadingImage = false;
@@ -2453,138 +2524,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     }
 //   }
 
-//   // Web Static Map
-//   Widget _buildWebStaticMap(bool isDarkMode) {
-//     if (_userLocation == null) {
-//       return Container(
-//         height: 300,
-//         margin: const EdgeInsets.all(16),
-//         decoration: BoxDecoration(
-//           color: isDarkMode ? Colors.grey[800] : Colors.grey[200],
-//           borderRadius: BorderRadius.circular(16),
-//         ),
-//         child: const Center(
-//           child: Column(
-//             mainAxisAlignment: MainAxisAlignment.center,
-//             children: [
-//               CircularProgressIndicator(),
-//               SizedBox(height: 16),
-//               Text('Getting your location...'),
-//             ],
-//           ),
-//         ),
-//       );
-//     }
-
-//     final String staticMapUrl = _buildStaticMapUrl();
-    
-//     return Container(
-//       height: 300,
-//       margin: const EdgeInsets.all(16),
-//       decoration: BoxDecoration(
-//         borderRadius: BorderRadius.circular(16),
-//         boxShadow: [
-//           BoxShadow(
-//             color: Colors.black.withOpacity(0.1),
-//             blurRadius: 10,
-//             offset: const Offset(0, 2),
-//           ),
-//         ],
-//       ),
-//       child: ClipRRect(
-//         borderRadius: BorderRadius.circular(16),
-//         child: Stack(
-//           children: [
-//             Image.network(
-//               staticMapUrl,
-//               fit: BoxFit.cover,
-//               width: double.infinity,
-//               height: double.infinity,
-//               loadingBuilder: (context, child, loadingProgress) {
-//                 if (loadingProgress == null) return child;
-//                 return Container(
-//                   color: isDarkMode ? Colors.grey[800] : Colors.grey[200],
-//                   child: const Center(
-//                     child: CircularProgressIndicator(),
-//                   ),
-//                 );
-//               },
-//               errorBuilder: (context, error, stackTrace) {
-//                 return Container(
-//                   color: isDarkMode ? Colors.grey[800] : Colors.grey[200],
-//                   child: Column(
-//                     mainAxisAlignment: MainAxisAlignment.center,
-//                     children: [
-//                       Icon(
-//                         Icons.map,
-//                         size: 50,
-//                         color: isDarkMode ? Colors.white54 : Colors.grey[600],
-//                       ),
-//                       const SizedBox(height: 16),
-//                       Text(
-//                         'Unable to load map',
-//                         style: TextStyle(
-//                           color: isDarkMode ? Colors.white54 : Colors.grey[600],
-//                         ),
-//                       ),
-//                     ],
-//                   ),
-//                 );
-//               },
-//             ),
-//             Positioned(
-//               bottom: 16,
-//               right: 16,
-//               child: Container(
-//                 padding: const EdgeInsets.all(8),
-//                 decoration: BoxDecoration(
-//                   color: Colors.white,
-//                   borderRadius: BorderRadius.circular(8),
-//                   boxShadow: [
-//                     BoxShadow(
-//                       color: Colors.black.withOpacity(0.2),
-//                       blurRadius: 4,
-//                     ),
-//                   ],
-//                 ),
-//                 child: Row(
-//                   mainAxisSize: MainAxisSize.min,
-//                   children: [
-//                     Icon(Icons.my_location, size: 16, color: const Color(0xFF39AC86)),
-//                     const SizedBox(width: 4),
-//                     Text(
-//                       _userZone ?? 'Zone Unknown',
-//                       style: const TextStyle(
-//                         fontSize: 12,
-//                         fontWeight: FontWeight.bold,
-//                         color: Color(0xFF39AC86),
-//                       ),
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-
-//   String _buildStaticMapUrl() {
-//     if (_userLocation == null) return '';
-    
-//     final String center = '${_userLocation!.latitude},${_userLocation!.longitude}';
-//     final String markers = 'color:green|label:You|$center';
-    
-//     return 'https://maps.googleapis.com/maps/api/staticmap?' +
-//         'center=$center' +
-//         '&zoom=4' +
-//         '&size=600x300' +
-//         '&maptype=roadmap' +
-//         '&markers=$markers' +
-//         '&key=AIzaSyCPg12KwplK7cc8DyiW3othqgzc9erUz3o';
-//   }
-
 //   // ============ COMMUNITY Q&A METHODS ============
 
 //   Future<void> _loadQuestions() async {
@@ -2677,6 +2616,13 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     }
 //   }
 
+//   void _removeSelectedImage() {
+//     setState(() {
+//       _selectedImage = null;
+//       _selectedImageBytes = null;
+//     });
+//   }
+
 //   Future<String?> _uploadImage() async {
 //     if (_selectedImage == null || _selectedImageBytes == null) return null;
     
@@ -2739,7 +2685,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //       final result = await _apiService.postCropQuestion(
 //         title: _questionController.text.trim(),
 //         description: '',
-//         category: _selectedCategory,
+//         category: _selectedCategory == 'All' ? 'Vegetables' : _selectedCategory,
 //         imageUrl: imageUrl,
 //       );
       
@@ -2752,10 +2698,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //         );
         
 //         _questionController.clear();
-//         setState(() {
-//           _selectedImage = null;
-//           _selectedImageBytes = null;
-//         });
+//         _removeSelectedImage();
         
 //         await _loadQuestions();
 //         await _trainAIWithExistingData();
@@ -2800,19 +2743,23 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //   }
 
 //   void _showAskQuestionDialog() {
+//     // Reset image selection when opening dialog
+//     _removeSelectedImage();
+    
 //     showDialog(
 //       context: context,
 //       barrierDismissible: false,
 //       builder: (context) => StatefulBuilder(
 //         builder: (context, setDialogState) {
 //           return AlertDialog(
-//             title: const Text('Ask a Question'),
+//             title: const Text('Create a Post'),
 //             content: SingleChildScrollView(
 //               child: Column(
 //                 mainAxisSize: MainAxisSize.min,
 //                 children: [
+//                   // Category Dropdown
 //                   DropdownButtonFormField<String>(
-//                     value: _selectedCategory,
+//                     value: _selectedCategory == 'All' ? 'Vegetables' : _selectedCategory,
 //                     items: _categories.where((c) => c != 'All').map((category) {
 //                       return DropdownMenuItem(
 //                         value: category,
@@ -2830,16 +2777,21 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                     ),
 //                   ),
 //                   const SizedBox(height: 16),
+                  
+//                   // Question Text Field
 //                   TextField(
 //                     controller: _questionController,
-//                     maxLines: 3,
+//                     maxLines: 4,
 //                     decoration: const InputDecoration(
-//                       labelText: 'Your Question',
-//                       hintText: 'What would you like to ask the community?',
+//                       labelText: 'What\'s on your mind?',
+//                       hintText: 'Share your question or experience with the community...',
 //                       border: OutlineInputBorder(),
+//                       alignLabelWithHint: true,
 //                     ),
 //                   ),
-//                   const SizedBox(height: 8),
+//                   const SizedBox(height: 16),
+                  
+//                   // AI Suggestion Button
 //                   ElevatedButton.icon(
 //                     onPressed: _getAISuggestionForQuestion,
 //                     icon: const Icon(Icons.auto_awesome, size: 18),
@@ -2850,68 +2802,108 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                     ),
 //                   ),
 //                   const SizedBox(height: 16),
-//                   GestureDetector(
-//                     onTap: _pickImage,
-//                     child: Container(
-//                       height: 100,
-//                       decoration: BoxDecoration(
-//                         color: Colors.grey[200],
-//                         borderRadius: BorderRadius.circular(8),
-//                         border: Border.all(color: Colors.grey[300]!),
-//                       ),
-//                       child: _selectedImageBytes != null
-//                           ? Stack(
-//                               fit: StackFit.expand,
-//                               children: [
-//                                 ClipRRect(
-//                                   borderRadius: BorderRadius.circular(8),
-//                                   child: Image.memory(
-//                                     _selectedImageBytes!,
-//                                     fit: BoxFit.cover,
-//                                   ),
+                  
+//                   // Image Picker Section (Like Facebook)
+//                   Container(
+//                     decoration: BoxDecoration(
+//                       border: Border.all(color: Colors.grey[300]!),
+//                       borderRadius: BorderRadius.circular(12),
+//                     ),
+//                     child: Column(
+//                       children: [
+//                         // Image preview if selected
+//                         if (_selectedImageBytes != null)
+//                           Stack(
+//                             children: [
+//                               ClipRRect(
+//                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+//                                 child: Image.memory(
+//                                   _selectedImageBytes!,
+//                                   height: 200,
+//                                   width: double.infinity,
+//                                   fit: BoxFit.cover,
 //                                 ),
-//                                 Positioned(
-//                                   top: 8,
-//                                   right: 8,
-//                                   child: GestureDetector(
-//                                     onTap: () {
-//                                       setDialogState(() {
-//                                         _selectedImage = null;
-//                                         _selectedImageBytes = null;
-//                                       });
-//                                     },
-//                                     child: Container(
-//                                       padding: const EdgeInsets.all(4),
-//                                       decoration: BoxDecoration(
-//                                         color: Colors.black.withOpacity(0.5),
-//                                         shape: BoxShape.circle,
-//                                       ),
-//                                       child: const Icon(
-//                                         Icons.close,
-//                                         color: Colors.white,
-//                                         size: 16,
-//                                       ),
+//                               ),
+//                               Positioned(
+//                                 top: 8,
+//                                 right: 8,
+//                                 child: GestureDetector(
+//                                   onTap: () {
+//                                     setDialogState(() {
+//                                       _selectedImage = null;
+//                                       _selectedImageBytes = null;
+//                                     });
+//                                   },
+//                                   child: Container(
+//                                     padding: const EdgeInsets.all(6),
+//                                     decoration: const BoxDecoration(
+//                                       color: Colors.black54,
+//                                       shape: BoxShape.circle,
+//                                     ),
+//                                     child: const Icon(
+//                                       Icons.close,
+//                                       color: Colors.white,
+//                                       size: 16,
 //                                     ),
 //                                   ),
 //                                 ),
-//                               ],
-//                             )
-//                           : Center(
-//                               child: Column(
-//                                 mainAxisAlignment: MainAxisAlignment.center,
-//                                 children: [
-//                                   const Icon(Icons.add_photo_alternate, size: 32),
-//                                   const SizedBox(height: 4),
-//                                   Text(
-//                                     'Add an image (optional)',
-//                                     style: TextStyle(
-//                                       fontSize: 12,
+//                               ),
+//                             ],
+//                           ),
+                        
+//                         // Add Photo Button
+//                         if (_selectedImageBytes == null)
+//                           InkWell(
+//                             onTap: () async {
+//                               await _pickImage();
+//                               setDialogState(() {});
+//                             },
+//                             child: Container(
+//                               height: 100,
+//                               decoration: BoxDecoration(
+//                                 color: Colors.grey[100],
+//                                 borderRadius: BorderRadius.circular(12),
+//                               ),
+//                               child: Center(
+//                                 child: Column(
+//                                   mainAxisAlignment: MainAxisAlignment.center,
+//                                   children: [
+//                                     Icon(
+//                                       Icons.add_photo_alternate,
+//                                       size: 32,
 //                                       color: Colors.grey[600],
 //                                     ),
-//                                   ),
-//                                 ],
+//                                     const SizedBox(height: 8),
+//                                     Text(
+//                                       'Add a photo (optional)',
+//                                       style: TextStyle(
+//                                         fontSize: 12,
+//                                         color: Colors.grey[600],
+//                                       ),
+//                                     ),
+//                                   ],
+//                                 ),
 //                               ),
 //                             ),
+//                           ),
+                        
+//                         // Change Photo Button
+//                         if (_selectedImageBytes != null)
+//                           Padding(
+//                             padding: const EdgeInsets.all(8),
+//                             child: TextButton.icon(
+//                               onPressed: () async {
+//                                 await _pickImage();
+//                                 setDialogState(() {});
+//                               },
+//                               icon: const Icon(Icons.edit, size: 16),
+//                               label: const Text('Change photo'),
+//                               style: TextButton.styleFrom(
+//                                 foregroundColor: const Color(0xFF39AC86),
+//                               ),
+//                             ),
+//                           ),
+//                       ],
 //                     ),
 //                   ),
 //                 ],
@@ -2919,7 +2911,11 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //             ),
 //             actions: [
 //               TextButton(
-//                 onPressed: () => Navigator.pop(context),
+//                 onPressed: () {
+//                   _questionController.clear();
+//                   _removeSelectedImage();
+//                   Navigator.pop(context);
+//                 },
 //                 child: const Text('Cancel'),
 //               ),
 //               ElevatedButton(
@@ -2930,7 +2926,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                 style: ElevatedButton.styleFrom(
 //                   backgroundColor: const Color(0xFF39AC86),
 //                 ),
-//                 child: const Text('Post Question'),
+//                 child: const Text('Post'),
 //               ),
 //             ],
 //           );
@@ -3004,7 +3000,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //           ? FloatingActionButton(
 //               onPressed: _showAskQuestionDialog,
 //               backgroundColor: const Color(0xFF39AC86),
-//               child: const Icon(Icons.question_answer, color: Colors.white),
+//               child: const Icon(Icons.add, color: Colors.white),
 //             )
 //           : _selectedSegment == 0
 //               ? FloatingActionButton(
@@ -3123,7 +3119,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                 ),
 //                 child: Center(
 //                   child: Text(
-//                     'Community Q&A',
+//                     'Community Feed',
 //                     style: TextStyle(
 //                       fontSize: 14,
 //                       fontWeight: FontWeight.bold,
@@ -3159,7 +3155,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //               child: TextField(
 //                 controller: _searchController,
 //                 decoration: InputDecoration(
-//                   hintText: 'Search questions...',
+//                   hintText: 'Search posts...',
 //                   hintStyle: TextStyle(
 //                     color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
 //                   ),
@@ -3268,8 +3264,50 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                 ),
 //               ),
 
-//               // Map (Web uses static map, Mobile uses interactive)
-//               kIsWeb ? _buildWebStaticMap(isDarkMode) : _buildMobileMap(isDarkMode),
+//               // Interactive Map (Works on both Web and Mobile)
+//               Container(
+//                 height: 350,
+//                 margin: const EdgeInsets.symmetric(horizontal: 16),
+//                 decoration: BoxDecoration(
+//                   borderRadius: BorderRadius.circular(16),
+//                   boxShadow: [
+//                     BoxShadow(
+//                       color: Colors.black.withOpacity(0.1),
+//                       blurRadius: 10,
+//                       offset: const Offset(0, 2),
+//                     ),
+//                   ],
+//                 ),
+//                 child: ClipRRect(
+//                   borderRadius: BorderRadius.circular(16),
+//                   child: GoogleMap(
+//                     onMapCreated: _onMapCreated,
+//                     initialCameraPosition: CameraPosition(
+//                       target: _userLocation ?? const LatLng(39.8283, -98.5795),
+//                       zoom: 4,
+//                     ),
+//                     markers: {
+//                       if (_userLocation != null)
+//                         Marker(
+//                           markerId: const MarkerId('user-location'),
+//                           position: _userLocation!,
+//                           infoWindow: const InfoWindow(
+//                             title: 'Your Location',
+//                             snippet: 'Your hardiness zone',
+//                           ),
+//                           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+//                         ),
+//                       ..._zoneMarkers,
+//                     },
+//                     myLocationEnabled: true,
+//                     myLocationButtonEnabled: true,
+//                     zoomControlsEnabled: true,
+//                     zoomGesturesEnabled: true,
+//                     scrollGesturesEnabled: true,
+//                     tiltGesturesEnabled: true,
+//                   ),
+//                 ),
+//               ),
 
 //               // Zone Cards
 //               Padding(
@@ -3507,46 +3545,10 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     );
 //   }
 
-//   Widget _buildMobileMap(bool isDarkMode) {
-//     return Container(
-//       height: 300,
-//       margin: const EdgeInsets.symmetric(horizontal: 16),
-//       decoration: BoxDecoration(
-//         borderRadius: BorderRadius.circular(16),
-//         border: Border.all(color: Colors.black.withOpacity(0.05)),
-//       ),
-//       child: ClipRRect(
-//         borderRadius: BorderRadius.circular(16),
-//         child: GoogleMap(
-//           onMapCreated: _onMapCreated,
-//           initialCameraPosition: CameraPosition(
-//             target: _userLocation ?? const LatLng(39.8283, -98.5795),
-//             zoom: 4,
-//           ),
-//           markers: {
-//             if (_userLocation != null)
-//               Marker(
-//                 markerId: const MarkerId('user-location'),
-//                 position: _userLocation!,
-//                 infoWindow: const InfoWindow(
-//                   title: 'Your Location',
-//                   snippet: 'Your hardiness zone',
-//                 ),
-//                 icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-//               ),
-//             ..._zoneMarkers,
-//           },
-//           myLocationEnabled: true,
-//           myLocationButtonEnabled: true,
-//           zoomControlsEnabled: true,
-//         ),
-//       ),
-//     );
-//   }
-
 //   Widget _buildCommunitySection(bool isDarkMode) {
 //     return Column(
 //       children: [
+//         // Category Filter Chips
 //         SizedBox(
 //           height: 44,
 //           child: ListView.builder(
@@ -3577,6 +3579,8 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //             },
 //           ),
 //         ),
+        
+//         // Posts Feed
 //         Expanded(
 //           child: _isLoadingQuestions
 //               ? const Center(child: CircularProgressIndicator(color: Color(0xFF39AC86)))
@@ -3587,7 +3591,7 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //                       itemCount: _filteredQuestions.length,
 //                       itemBuilder: (context, index) {
 //                         final question = _filteredQuestions[index];
-//                         return _buildQuestionCard(question, isDarkMode);
+//                         return _buildPostCard(question, isDarkMode);
 //                       },
 //                     ),
 //         ),
@@ -3595,12 +3599,11 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     );
 //   }
 
-//   Widget _buildQuestionCard(QuestionPost question, bool isDarkMode) {
+//   Widget _buildPostCard(QuestionPost question, bool isDarkMode) {
 //     final timeAgo = _getTimeAgo(question.createdAt);
     
 //     return Container(
-//       margin: const EdgeInsets.only(bottom: 12),
-//       padding: const EdgeInsets.all(16),
+//       margin: const EdgeInsets.only(bottom: 16),
 //       decoration: BoxDecoration(
 //         color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white,
 //         borderRadius: BorderRadius.circular(12),
@@ -3611,96 +3614,120 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //       child: Column(
 //         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
-//           Row(
-//             children: [
-//               if (question.authorImage.isNotEmpty)
-//                 CircleAvatar(
-//                   radius: 16,
-//                   backgroundImage: NetworkImage(question.authorImage),
-//                 )
-//               else
-//                 Container(
-//                   width: 32,
-//                   height: 32,
-//                   decoration: BoxDecoration(
-//                     color: const Color(0xFF39AC86).withOpacity(0.1),
-//                     shape: BoxShape.circle,
-//                   ),
-//                   child: Center(
-//                     child: Text(
-//                       question.author[0].toUpperCase(),
-//                       style: const TextStyle(
-//                         color: Color(0xFF39AC86),
-//                         fontWeight: FontWeight.bold,
+//           // Post Header (Author info)
+//           Padding(
+//             padding: const EdgeInsets.all(12),
+//             child: Row(
+//               children: [
+//                 if (question.authorImage.isNotEmpty)
+//                   CircleAvatar(
+//                     radius: 20,
+//                     backgroundImage: NetworkImage(question.authorImage),
+//                   )
+//                 else
+//                   Container(
+//                     width: 40,
+//                     height: 40,
+//                     decoration: BoxDecoration(
+//                       color: const Color(0xFF39AC86).withOpacity(0.1),
+//                       shape: BoxShape.circle,
+//                     ),
+//                     child: Center(
+//                       child: Text(
+//                         question.author[0].toUpperCase(),
+//                         style: const TextStyle(
+//                           color: Color(0xFF39AC86),
+//                           fontWeight: FontWeight.bold,
+//                           fontSize: 16,
+//                         ),
 //                       ),
 //                     ),
 //                   ),
-//                 ),
-//               const SizedBox(width: 8),
-//               Expanded(
-//                 child: Column(
-//                   crossAxisAlignment: CrossAxisAlignment.start,
-//                   children: [
-//                     Text(
-//                       question.author,
-//                       style: TextStyle(
-//                         fontSize: 12,
-//                         fontWeight: FontWeight.bold,
-//                         color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                 const SizedBox(width: 12),
+//                 Expanded(
+//                   child: Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       Text(
+//                         question.author,
+//                         style: TextStyle(
+//                           fontSize: 14,
+//                           fontWeight: FontWeight.bold,
+//                           color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                         ),
 //                       ),
-//                     ),
-//                     Text(
-//                       timeAgo,
-//                       style: TextStyle(
-//                         fontSize: 10,
-//                         color: const Color(0xFF5C8A7A),
+//                       Row(
+//                         children: [
+//                           Text(
+//                             timeAgo,
+//                             style: TextStyle(
+//                               fontSize: 11,
+//                               color: const Color(0xFF5C8A7A),
+//                             ),
+//                           ),
+//                           const SizedBox(width: 8),
+//                           Container(
+//                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+//                             decoration: BoxDecoration(
+//                               color: const Color(0xFF39AC86).withOpacity(0.1),
+//                               borderRadius: BorderRadius.circular(8),
+//                             ),
+//                             child: Text(
+//                               question.category,
+//                               style: const TextStyle(
+//                                 fontSize: 10,
+//                                 fontWeight: FontWeight.bold,
+//                                 color: Color(0xFF39AC86),
+//                               ),
+//                             ),
+//                           ),
+//                         ],
 //                       ),
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//               Container(
-//                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-//                 decoration: BoxDecoration(
-//                   color: const Color(0xFF39AC86).withOpacity(0.1),
-//                   borderRadius: BorderRadius.circular(8),
-//                 ),
-//                 child: Text(
-//                   question.category,
-//                   style: const TextStyle(
-//                     fontSize: 10,
-//                     fontWeight: FontWeight.bold,
-//                     color: Color(0xFF39AC86),
+//                     ],
 //                   ),
 //                 ),
-//               ),
-//             ],
+//               ],
+//             ),
 //           ),
-//           const SizedBox(height: 12),
-//           GestureDetector(
-//             onTap: () => _showQuestionDetail(question),
-//             child: Text(
-//               question.title,
-//               style: TextStyle(
-//                 fontSize: 16,
-//                 fontWeight: FontWeight.bold,
-//                 color: isDarkMode ? Colors.white : const Color(0xFF101816),
+          
+//           // Post Content (Text)
+//           Padding(
+//             padding: const EdgeInsets.symmetric(horizontal: 12),
+//             child: GestureDetector(
+//               onTap: () => _showQuestionDetail(question),
+//               child: Text(
+//                 question.title,
+//                 style: TextStyle(
+//                   fontSize: 16,
+//                   color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                   height: 1.4,
+//                 ),
 //               ),
 //             ),
 //           ),
+          
+//           // Post Image (if exists) - Like Facebook style
 //           if (question.imageUrl != null && question.imageUrl!.isNotEmpty) ...[
-//             const SizedBox(height: 8),
+//             const SizedBox(height: 12),
 //             GestureDetector(
 //               onTap: () => _showQuestionDetail(question),
 //               child: ClipRRect(
-//                 borderRadius: BorderRadius.circular(8),
 //                 child: Image.network(
 //                   question.imageUrl!,
-//                   height: 150,
 //                   width: double.infinity,
 //                   fit: BoxFit.cover,
+//                   loadingBuilder: (context, child, loadingProgress) {
+//                     if (loadingProgress == null) return child;
+//                     return Container(
+//                       height: 200,
+//                       color: Colors.grey[300],
+//                       child: const Center(
+//                         child: CircularProgressIndicator(),
+//                       ),
+//                     );
+//                   },
 //                   errorBuilder: (context, error, stack) => Container(
-//                     height: 150,
+//                     height: 200,
 //                     color: Colors.grey[300],
 //                     child: const Icon(Icons.broken_image, size: 50),
 //                   ),
@@ -3708,47 +3735,61 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //               ),
 //             ),
 //           ],
-//           const SizedBox(height: 12),
-//           Row(
-//             children: [
-//               GestureDetector(
-//                 onTap: () => _showQuestionDetail(question),
-//                 child: Row(
-//                   children: [
-//                     Icon(Icons.chat_bubble_outline, size: 14, color: const Color(0xFF5C8A7A)),
-//                     const SizedBox(width: 4),
-//                     Text('${question.answers} answers', style: TextStyle(fontSize: 12, color: const Color(0xFF5C8A7A))),
-//                   ],
-//                 ),
-//               ),
-//               const SizedBox(width: 16),
-//               GestureDetector(
-//                 onTap: () => _likeQuestion(question),
-//                 child: Row(
-//                   children: [
-//                     Icon(
-//                       question.userLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-//                       size: 14,
-//                       color: question.userLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
-//                     ),
-//                     const SizedBox(width: 4),
-//                     Text(
-//                       '${question.likes}',
-//                       style: TextStyle(
-//                         fontSize: 12,
+          
+//           // Post Actions (Like, Comment, etc.)
+//           Padding(
+//             padding: const EdgeInsets.all(12),
+//             child: Row(
+//               children: [
+//                 // Like button
+//                 GestureDetector(
+//                   onTap: () => _likeQuestion(question),
+//                   child: Row(
+//                     children: [
+//                       Icon(
+//                         question.userLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+//                         size: 18,
 //                         color: question.userLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
 //                       ),
-//                     ),
-//                   ],
+//                       const SizedBox(width: 6),
+//                       Text(
+//                         '${question.likes}',
+//                         style: TextStyle(
+//                           fontSize: 13,
+//                           color: question.userLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
+//                         ),
+//                       ),
+//                     ],
+//                   ),
 //                 ),
-//               ),
-//               if (question.solved) ...[
-//                 const SizedBox(width: 16),
-//                 const Icon(Icons.check_circle, size: 14, color: Color(0xFF39AC86)),
-//                 const SizedBox(width: 4),
-//                 const Text('Solved', style: TextStyle(fontSize: 12, color: Color(0xFF39AC86))),
+//                 const SizedBox(width: 24),
+                
+//                 // Comment button
+//                 GestureDetector(
+//                   onTap: () => _showQuestionDetail(question),
+//                   child: Row(
+//                     children: [
+//                       Icon(Icons.chat_bubble_outline, size: 18, color: const Color(0xFF5C8A7A)),
+//                       const SizedBox(width: 6),
+//                       Text(
+//                         '${question.answers} comments',
+//                         style: const TextStyle(
+//                           fontSize: 13,
+//                           color: Color(0xFF5C8A7A),
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+                
+//                 if (question.solved) ...[
+//                   const Spacer(),
+//                   const Icon(Icons.check_circle, size: 16, color: Color(0xFF39AC86)),
+//                   const SizedBox(width: 4),
+//                   const Text('Solved', style: TextStyle(fontSize: 12, color: Color(0xFF39AC86))),
+//                 ],
 //               ],
-//             ],
+//             ),
 //           ),
 //         ],
 //       ),
@@ -3762,14 +3803,17 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //         children: [
 //           Icon(Icons.question_answer, size: 80, color: const Color(0xFF39AC86).withOpacity(0.3)),
 //           const SizedBox(height: 16),
-//           Text('No questions yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : const Color(0xFF101816))),
+//           Text('No posts yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : const Color(0xFF101816))),
 //           const SizedBox(height: 8),
-//           const Text('Be the first to ask a question!', style: TextStyle(fontSize: 14, color: Color(0xFF5C8A7A))),
+//           const Text('Be the first to share something with the community!', style: TextStyle(fontSize: 14, color: Color(0xFF5C8A7A))),
 //           const SizedBox(height: 24),
 //           ElevatedButton(
 //             onPressed: _showAskQuestionDialog,
-//             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF39AC86), padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12)),
-//             child: const Text('Ask a Question', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+//             style: ElevatedButton.styleFrom(
+//               backgroundColor: const Color(0xFF39AC86),
+//               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+//             ),
+//             child: const Text('Create a Post', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
 //           ),
 //         ],
 //       ),
@@ -3931,149 +3975,296 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
 //     return Container(
-//       height: MediaQuery.of(context).size.height * 0.8,
+//       height: MediaQuery.of(context).size.height * 0.85,
 //       decoration: BoxDecoration(
 //         color: isDarkMode ? const Color(0xFF212C28) : const Color(0xFFF9F8F6),
 //         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
 //       ),
 //       child: Column(
 //         children: [
-//           Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-//           Padding(
-//             padding: const EdgeInsets.all(16),
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Row(
-//                   children: [
-//                     widget.question.authorImage.isNotEmpty
-//                         ? CircleAvatar(radius: 20, backgroundImage: NetworkImage(widget.question.authorImage))
-//                         : Container(
-//                             width: 40, height: 40,
-//                             decoration: BoxDecoration(color: const Color(0xFF39AC86).withOpacity(0.1), shape: BoxShape.circle),
-//                             child: Center(child: Text(widget.question.author[0].toUpperCase(), style: const TextStyle(color: Color(0xFF39AC86), fontWeight: FontWeight.bold, fontSize: 16))),
-//                           ),
-//                     const SizedBox(width: 12),
-//                     Expanded(
-//                       child: Column(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Text(widget.question.author, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : const Color(0xFF101816))),
-//                           Text(_getTimeAgo(widget.question.createdAt), style: TextStyle(fontSize: 12, color: const Color(0xFF5C8A7A))),
-//                         ],
-//                       ),
-//                     ),
-//                     Container(
-//                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-//                       decoration: BoxDecoration(color: const Color(0xFF39AC86).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-//                       child: Text(widget.question.category, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF39AC86))),
-//                     ),
-//                   ],
-//                 ),
-//                 const SizedBox(height: 16),
-//                 Text(widget.question.title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : const Color(0xFF101816))),
-//                 if (widget.question.imageUrl != null) ...[
-//                   const SizedBox(height: 12),
-//                   ClipRRect(
-//                     borderRadius: BorderRadius.circular(8),
-//                     child: Image.network(
-//                       widget.question.imageUrl!,
-//                       height: 200,
-//                       width: double.infinity,
-//                       fit: BoxFit.cover,
-//                       errorBuilder: (context, error, stack) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.broken_image, size: 50)),
-//                     ),
-//                   ),
-//                 ],
-//               ],
+//           // Drag handle
+//           Container(
+//             margin: const EdgeInsets.only(top: 12),
+//             width: 40,
+//             height: 4,
+//             decoration: BoxDecoration(
+//               color: Colors.grey[300],
+//               borderRadius: BorderRadius.circular(2),
 //             ),
 //           ),
+          
+//           // Post content
 //           Expanded(
-//             child: _isLoading
-//                 ? const Center(child: CircularProgressIndicator())
-//                 : _answers.isEmpty
-//                     ? const Center(child: Text('No answers yet. Be the first to help!', style: TextStyle(color: Color(0xFF5C8A7A))))
-//                     : ListView.builder(
-//                         padding: const EdgeInsets.symmetric(horizontal: 16),
-//                         itemCount: _answers.length,
-//                         itemBuilder: (context, index) {
-//                           final answer = _answers[index];
-//                           final timeAgo = answer['createdAt'] is DateTime ? _getTimeAgo(answer['createdAt']) : 'Just now';
-//                           final isLiked = answer['userLiked'] ?? false;
-                          
-//                           return Container(
-//                             margin: const EdgeInsets.only(bottom: 16),
-//                             padding: const EdgeInsets.all(12),
-//                             decoration: BoxDecoration(
-//                               color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.white,
-//                               borderRadius: BorderRadius.circular(12),
-//                               border: Border.all(color: Colors.black.withOpacity(0.05)),
-//                             ),
-//                             child: Column(
-//                               crossAxisAlignment: CrossAxisAlignment.start,
-//                               children: [
-//                                 Row(
-//                                   children: [
-//                                     answer['authorImage'] != null && answer['authorImage'].isNotEmpty
-//                                         ? CircleAvatar(radius: 16, backgroundImage: NetworkImage(answer['authorImage']))
-//                                         : Container(
-//                                             width: 32, height: 32,
-//                                             decoration: BoxDecoration(color: const Color(0xFF39AC86).withOpacity(0.1), shape: BoxShape.circle),
-//                                             child: Center(child: Text(answer['author'][0].toUpperCase(), style: const TextStyle(color: Color(0xFF39AC86), fontWeight: FontWeight.bold))),
-//                                           ),
-//                                     const SizedBox(width: 8),
-//                                     Expanded(
-//                                       child: Column(
-//                                         crossAxisAlignment: CrossAxisAlignment.start,
-//                                         children: [
-//                                           Text(answer['author'], style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : const Color(0xFF101816))),
-//                                           Text(timeAgo, style: TextStyle(fontSize: 10, color: const Color(0xFF5C8A7A))),
-//                                         ],
-//                                       ),
-//                                     ),
-//                                     Row(
-//                                       children: [
-//                                         IconButton(
-//                                           onPressed: () => _likeAnswer(answer),
-//                                           icon: Icon(
-//                                             isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-//                                             size: 16,
-//                                           ),
-//                                           color: isLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
-//                                         ),
-//                                         Text('${answer['likes']}', style: const TextStyle(fontSize: 12, color: Color(0xFF5C8A7A))),
-//                                       ],
-//                                     ),
-//                                   ],
+//             child: SingleChildScrollView(
+//               padding: const EdgeInsets.all(16),
+//               child: Column(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   // Author info
+//                   Row(
+//                     children: [
+//                       widget.question.authorImage.isNotEmpty
+//                           ? CircleAvatar(radius: 24, backgroundImage: NetworkImage(widget.question.authorImage))
+//                           : Container(
+//                               width: 48,
+//                               height: 48,
+//                               decoration: BoxDecoration(
+//                                 color: const Color(0xFF39AC86).withOpacity(0.1),
+//                                 shape: BoxShape.circle,
+//                               ),
+//                               child: Center(
+//                                 child: Text(
+//                                   widget.question.author[0].toUpperCase(),
+//                                   style: const TextStyle(
+//                                     color: Color(0xFF39AC86),
+//                                     fontWeight: FontWeight.bold,
+//                                     fontSize: 18,
+//                                   ),
 //                                 ),
-//                                 const SizedBox(height: 8),
-//                                 Text(answer['text'], style: TextStyle(fontSize: 14, color: isDarkMode ? Colors.white70 : const Color(0xFF101816), height: 1.4)),
+//                               ),
+//                             ),
+//                       const SizedBox(width: 12),
+//                       Expanded(
+//                         child: Column(
+//                           crossAxisAlignment: CrossAxisAlignment.start,
+//                           children: [
+//                             Text(
+//                               widget.question.author,
+//                               style: TextStyle(
+//                                 fontWeight: FontWeight.bold,
+//                                 fontSize: 16,
+//                                 color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                               ),
+//                             ),
+//                             Row(
+//                               children: [
+//                                 Text(
+//                                   _getTimeAgo(widget.question.createdAt),
+//                                   style: const TextStyle(fontSize: 12, color: Color(0xFF5C8A7A)),
+//                                 ),
+//                                 const SizedBox(width: 8),
+//                                 Container(
+//                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+//                                   decoration: BoxDecoration(
+//                                     color: const Color(0xFF39AC86).withOpacity(0.1),
+//                                     borderRadius: BorderRadius.circular(8),
+//                                   ),
+//                                   child: Text(
+//                                     widget.question.category,
+//                                     style: const TextStyle(
+//                                       fontSize: 11,
+//                                       fontWeight: FontWeight.bold,
+//                                       color: Color(0xFF39AC86),
+//                                     ),
+//                                   ),
+//                                 ),
 //                               ],
 //                             ),
+//                           ],
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                   const SizedBox(height: 16),
+                  
+//                   // Post text
+//                   Text(
+//                     widget.question.title,
+//                     style: TextStyle(
+//                       fontSize: 18,
+//                       fontWeight: FontWeight.w500,
+//                       color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                       height: 1.4,
+//                     ),
+//                   ),
+                  
+//                   // Post image
+//                   if (widget.question.imageUrl != null && widget.question.imageUrl!.isNotEmpty) ...[
+//                     const SizedBox(height: 16),
+//                     ClipRRect(
+//                       borderRadius: BorderRadius.circular(12),
+//                       child: Image.network(
+//                         widget.question.imageUrl!,
+//                         width: double.infinity,
+//                         fit: BoxFit.cover,
+//                         loadingBuilder: (context, child, loadingProgress) {
+//                           if (loadingProgress == null) return child;
+//                           return Container(
+//                             height: 300,
+//                             color: Colors.grey[300],
+//                             child: const Center(child: CircularProgressIndicator()),
 //                           );
 //                         },
 //                       ),
+//                     ),
+//                   ],
+                  
+//                   const SizedBox(height: 24),
+                  
+//                   // Answers section
+//                   Row(
+//                     children: [
+//                       const Icon(Icons.chat_bubble_outline, size: 18, color: Color(0xFF5C8A7A)),
+//                       const SizedBox(width: 8),
+//                       Text(
+//                         '${_answers.length} Comments',
+//                         style: const TextStyle(
+//                           fontSize: 14,
+//                           fontWeight: FontWeight.bold,
+//                           color: Color(0xFF5C8A7A),
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                   const Divider(height: 24),
+                  
+//                   // Comments list
+//                   _isLoading
+//                       ? const Center(child: CircularProgressIndicator())
+//                       : _answers.isEmpty
+//                           ? const Center(
+//                               child: Padding(
+//                                 padding: EdgeInsets.all(32),
+//                                 child: Text(
+//                                   'No comments yet. Be the first to comment!',
+//                                   style: TextStyle(color: Color(0xFF5C8A7A)),
+//                                 ),
+//                               ),
+//                             )
+//                           : ListView.builder(
+//                               shrinkWrap: true,
+//                               physics: const NeverScrollableScrollPhysics(),
+//                               itemCount: _answers.length,
+//                               itemBuilder: (context, index) {
+//                                 final answer = _answers[index];
+//                                 final timeAgo = answer['createdAt'] is DateTime 
+//                                     ? _getTimeAgo(answer['createdAt']) 
+//                                     : 'Just now';
+//                                 final isLiked = answer['userLiked'] ?? false;
+                                
+//                                 return Container(
+//                                   margin: const EdgeInsets.only(bottom: 16),
+//                                   child: Row(
+//                                     crossAxisAlignment: CrossAxisAlignment.start,
+//                                     children: [
+//                                       answer['authorImage'] != null && answer['authorImage'].isNotEmpty
+//                                           ? CircleAvatar(radius: 20, backgroundImage: NetworkImage(answer['authorImage']))
+//                                           : Container(
+//                                               width: 40,
+//                                               height: 40,
+//                                               decoration: BoxDecoration(
+//                                                 color: const Color(0xFF39AC86).withOpacity(0.1),
+//                                                 shape: BoxShape.circle,
+//                                               ),
+//                                               child: Center(
+//                                                 child: Text(
+//                                                   answer['author'][0].toUpperCase(),
+//                                                   style: const TextStyle(
+//                                                     color: Color(0xFF39AC86),
+//                                                     fontWeight: FontWeight.bold,
+//                                                   ),
+//                                                 ),
+//                                               ),
+//                                             ),
+//                                       const SizedBox(width: 12),
+//                                       Expanded(
+//                                         child: Column(
+//                                           crossAxisAlignment: CrossAxisAlignment.start,
+//                                           children: [
+//                                             Text(
+//                                               answer['author'],
+//                                               style: TextStyle(
+//                                                 fontWeight: FontWeight.bold,
+//                                                 fontSize: 14,
+//                                                 color: isDarkMode ? Colors.white : const Color(0xFF101816),
+//                                               ),
+//                                             ),
+//                                             Text(
+//                                               timeAgo,
+//                                               style: const TextStyle(
+//                                                 fontSize: 11,
+//                                                 color: Color(0xFF5C8A7A),
+//                                               ),
+//                                             ),
+//                                             const SizedBox(height: 8),
+//                                             Text(
+//                                               answer['text'],
+//                                               style: TextStyle(
+//                                                 fontSize: 14,
+//                                                 color: isDarkMode ? Colors.white70 : const Color(0xFF101816),
+//                                                 height: 1.3,
+//                                               ),
+//                                             ),
+//                                             const SizedBox(height: 8),
+//                                             GestureDetector(
+//                                               onTap: () => _likeAnswer(answer),
+//                                               child: Row(
+//                                                 children: [
+//                                                   Icon(
+//                                                     isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+//                                                     size: 14,
+//                                                     color: isLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
+//                                                   ),
+//                                                   const SizedBox(width: 4),
+//                                                   Text(
+//                                                     '${answer['likes']}',
+//                                                     style: TextStyle(
+//                                                       fontSize: 12,
+//                                                       color: isLiked ? const Color(0xFF39AC86) : const Color(0xFF5C8A7A),
+//                                                     ),
+//                                                   ),
+//                                                 ],
+//                                               ),
+//                                             ),
+//                                           ],
+//                                         ),
+//                                       ),
+//                                     ],
+//                                   ),
+//                                 );
+//                               },
+//                             ),
+//                 ],
+//               ),
+//             ),
 //           ),
+          
+//           // Comment input
 //           Container(
 //             padding: const EdgeInsets.all(16),
-//             decoration: BoxDecoration(color: isDarkMode ? const Color(0xFF1A2A25) : Colors.white, border: Border(top: BorderSide(color: Colors.black.withOpacity(0.05)))),
+//             decoration: BoxDecoration(
+//               color: isDarkMode ? const Color(0xFF1A2A25) : Colors.white,
+//               border: Border(
+//                 top: BorderSide(color: Colors.black.withOpacity(0.05)),
+//               ),
+//             ),
 //             child: Row(
 //               children: [
 //                 Expanded(
 //                   child: Container(
 //                     padding: const EdgeInsets.symmetric(horizontal: 16),
-//                     decoration: BoxDecoration(color: isDarkMode ? Colors.white.withOpacity(0.1) : const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(24)),
+//                     decoration: BoxDecoration(
+//                       color: isDarkMode ? Colors.white.withOpacity(0.1) : const Color(0xFFF5F5F5),
+//                       borderRadius: BorderRadius.circular(24),
+//                     ),
 //                     child: TextField(
 //                       controller: _replyController,
-//                       decoration: const InputDecoration(hintText: 'Write an answer...', border: InputBorder.none),
+//                       decoration: const InputDecoration(
+//                         hintText: 'Write a comment...',
+//                         border: InputBorder.none,
+//                       ),
 //                       maxLines: null,
 //                     ),
 //                   ),
 //                 ),
 //                 const SizedBox(width: 8),
 //                 Container(
-//                   width: 40, height: 40,
-//                   decoration: const BoxDecoration(color: Color(0xFF39AC86), shape: BoxShape.circle),
+//                   width: 40,
+//                   height: 40,
+//                   decoration: const BoxDecoration(
+//                     color: Color(0xFF39AC86),
+//                     shape: BoxShape.circle,
+//                   ),
 //                   child: IconButton(
 //                     onPressed: _addAnswer,
 //                     icon: const Icon(Icons.send, size: 20, color: Colors.white),
@@ -4088,3 +4279,6 @@ class _QuestionDetailSheetState extends State<_QuestionDetailSheet> {
 //     );
 //   }
 // }
+
+
+
