@@ -105,7 +105,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Updated: Show a nice "Coming Soon" dialog instead of trying to call API
   void _showForgotPasswordDialog() {
     showDialog(
       context: context,
@@ -156,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.email_outline,
+                    Icons.email_outlined, // FIXED: Changed from email_outline to email_outlined
                     color: Color(0xFF39AC86),
                     size: 20,
                   ),
@@ -205,103 +204,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Alternative: If you want to collect email for future implementation
-  void _showEmailInputDialog() {
-    final TextEditingController emailController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Reset Password',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Enter your email address and we\'ll send you a password reset link.',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: emailController,
-              decoration: InputDecoration(
-                hintText: 'your@email.com',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF39AC86)),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Note: Password reset is currently under development. This feature will be available soon!',
-                      style: TextStyle(fontSize: 12, color: Colors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (emailController.text.trim().isNotEmpty) {
-                // Show coming soon message
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password reset coming soon! Please contact support.'),
-                    backgroundColor: Colors.orange,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter your email address'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF39AC86),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Send Reset Link'),
           ),
         ],
       ),
@@ -438,7 +340,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                // Forgot Password Button (Updated - no API call)
+                // Forgot Password Button
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                   child: Row(
