@@ -98,9 +98,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final profileResult = await _apiService.getUserProfile();
       if (profileResult['success'] == true) {
+        final newProfileData = profileResult['profile'];
         setState(() {
-          _profileData = profileResult['profile'];
+          _profileData = newProfileData;
         });
+        
+        // CRITICAL: Update AuthProvider with fresh user data
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        await authProvider.updateUserData(newProfileData);
       }
 
       final cropsResult = await _apiService.getUserCrops();
@@ -144,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Failed to load profile data'),
             backgroundColor: Colors.red,
           ),
@@ -156,14 +161,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-    final currentUser = authProvider.currentUser ?? _profileData;
+    
+    // USE FRESHLY FETCHED PROFILE DATA FIRST, THEN FALLBACK TO AUTH PROVIDER
+    final currentUser = _profileData ?? authProvider.currentUser;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     if (_isRefreshing && currentUser == null) {
       return Scaffold(
         backgroundColor: isDarkMode ? const Color(0xFF212C28) : const Color(0xFFF9F8F6),
-        body: Center(
-          child: CircularProgressIndicator(color: const Color(0xFF39AC86)),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF39AC86)),
         ),
       );
     }
@@ -216,7 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
+          const CircularProgressIndicator(
             color: const Color(0xFF39AC86),
           ),
           const SizedBox(height: 20),
@@ -770,8 +777,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  // ============= UPDATED HELPER WIDGET METHODS =============
 
   Widget _buildProfileImage(Map<String, dynamic> user) {
     final imageUrl = user['profile_image_url'];
