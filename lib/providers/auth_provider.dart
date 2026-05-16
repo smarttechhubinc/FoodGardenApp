@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -13,7 +15,6 @@ class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? get currentUser => _currentUser;
   bool get isAuthenticated => _apiService.isLoggedIn;
   
-  // ADD THESE GETTERS
   String? get token => _apiService.token;
   String? get userId => _currentUser?['id'];
 
@@ -45,6 +46,27 @@ class AuthProvider with ChangeNotifier {
       await logout();
     }
     notifyListeners();
+  }
+
+  // NEW: Update user data from profile screen
+  Future<void> updateUserData(Map<String, dynamic> updatedUser) async {
+    _currentUser = updatedUser;
+    notifyListeners();
+    print('✅ AuthProvider user data updated');
+    
+    // Update local storage to keep it in sync
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_data', jsonEncode(updatedUser));
+  }
+
+  // NEW: Refresh user data from API
+  Future<void> refreshUserData() async {
+    final result = await _apiService.getCurrentUser();
+    if (result['success'] == true) {
+      _currentUser = result['user'];
+      notifyListeners();
+      print('✅ AuthProvider user data refreshed');
+    }
   }
 
   // Login method
@@ -82,7 +104,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Register method - UPDATED VERSION
+  // Register method
   Future<Map<String, dynamic>> register({
     required String email,
     required String password,
@@ -106,15 +128,11 @@ class AuthProvider with ChangeNotifier {
         _currentUser = result['user'];
         _error = null;
         
-        // IMPORTANT: After registration, we need to re-initialize ApiService
-        // to load the new token that was just saved
-        await _apiService.initialize(); // This will load the new token
+        await _apiService.initialize();
         
-        // Now check if we're authenticated
         print('🔑 After registration - isLoggedIn: ${_apiService.isLoggedIn}');
         print('🔑 After registration - token: ${_apiService.token?.substring(0, 30)}...');
         
-        // Also load the current user data
         if (_apiService.isLoggedIn) {
           await _loadCurrentUser();
         }
@@ -154,7 +172,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Forgot password - ADD THIS METHOD
+  // Forgot password
   Future<Map<String, dynamic>> forgotPassword(String email) async {
     _isLoading = true;
     _error = null;
