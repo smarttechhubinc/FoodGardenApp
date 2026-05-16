@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
+import 'main_layout.dart';
 import 'login_screen.dart';
 import 'terms_privacy_modal.dart';
 
@@ -47,13 +48,21 @@ class _SignupScreenState extends State<SignupScreen> {
         _nameController.text.isEmpty) {
       _showError('Please fill all fields');
       return;
-    } else if (_passwordController.text != _confirmPasswordController.text) {
+    }
+    
+    if (_passwordController.text != _confirmPasswordController.text) {
       _showError('Passwords do not match');
       return;
     }
     
     if (_passwordController.text.length < 8) {
       _showError('Password must be at least 8 characters long');
+      return;
+    }
+
+    // Email validation
+    if (!_isValidEmail(_emailController.text.trim())) {
+      _showError('Please enter a valid email address');
       return;
     }
 
@@ -85,29 +94,50 @@ class _SignupScreenState extends State<SignupScreen> {
       if (result['success'] == true && mounted) {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Registration successful! Please login.'),
+          const SnackBar(
+            content: Text('Account created successfully! Welcome to Harvest Hub! 🌱'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 2),
           ),
         );
         
-        // Navigate to login screen
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
-        );
+        // OPTION 1: Auto-login after registration (Recommended)
+        // The user is already authenticated because register returns a token
+        // So navigate directly to MainLayout
+        if (authProvider.isAuthenticated) {
+          // Clear all previous routes and go to main layout
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => const MainLayout(),
+            ),
+            (route) => false, // This removes all previous routes
+          );
+        } else {
+          // Fallback: Go to login screen
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => const LoginScreen(),
+            ),
+            (route) => false,
+          );
+        }
       } else {
         _showError(result['error'] ?? 'Registration failed');
       }
     } catch (e) {
       _showError('An unexpected error occurred: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    return emailRegex.hasMatch(email);
   }
 
   void _showError(String message) {
@@ -377,10 +407,11 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          Navigator.of(context).pushReplacement(
+                          Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
                               builder: (context) => const LoginScreen(),
                             ),
+                            (route) => false,
                           );
                         },
                         child: const Text(
