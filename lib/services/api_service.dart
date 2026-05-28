@@ -8,9 +8,10 @@ class ApiService {
   ApiService._internal();
 
   // IMPORTANT: Uncomment the one you're using
-  static const String baseUrl = 'https://foodsharingbackend.onrender.com'; // Production
+  static const String baseUrl = 'https://foodsharingbackend-n5py.onrender.com'; // Production
   // static const String baseUrl = 'http://localhost:5000'; // Local development
   // static const String baseUrl = 'http://10.0.2.2:5000'; // Android emulator sys
+  // https://foodsharingbackend-n5py.onrender.com
   
   String? _token;
   bool _isInitialized = false;
