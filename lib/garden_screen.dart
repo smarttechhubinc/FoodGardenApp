@@ -731,7 +731,7 @@ class _GardenScreenState extends State<GardenScreen> with TickerProviderStateMix
           _aiAnswer,
           style: TextStyle(
             fontSize: 14,
-            color: isDarkMode ? Colors.white87 : const Color(0xFF1F2937),
+            color: isDarkMode ? Colors.white70 : const Color(0xFF1F2937),
             height: 1.6,
           ),
         ),
