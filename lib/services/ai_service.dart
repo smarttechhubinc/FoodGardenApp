@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AIService {
   // Use your backend URL instead of OpenAI directly
-  static const String _baseUrl = 'https://foodsharingbackend.onrender.com'; // Update with your backend URL
+  static const String _baseUrl = 'https://foodsharingbackend-n5py.onrender.com'; // Update with your backend URL
   
   // Store training data locally for context
   List<Map<String, String>> _trainingData = [];
