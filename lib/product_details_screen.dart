@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'messages_screen.dart';
@@ -22,7 +23,7 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   final ApiService _apiService = ApiService();
-  
+
   // Location related
   GoogleMapController? _mapController;
   LatLng? _pickupLocation;
@@ -31,7 +32,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isLoadingLocation = true;
   String? _locationError;
   String? _locationAddress;
-  
+
   // Product data
   late Map<String, dynamic> _productData;
   int _currentQuantity;
@@ -48,7 +49,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     _productData = widget.productData;
     _currentQuantity = _productData['quantity'] ?? 0;
     _initializeLocation();
-    _getAddressFromCoordinates();
     _checkExistingRequest();
   }
 
@@ -56,11 +56,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.currentUser;
-      
+
       if (currentUser == null) return;
-      
+
       final result = await _apiService.getUserProductRequest(_productData['id']);
-      
+
       if (result['success'] == true && result['request'] != null) {
         final request = result['request'];
         setState(() {
@@ -83,21 +83,35 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Future<void> _initializeLocation() async {
     final latitude = _productData['latitude'];
     final longitude = _productData['longitude'];
-    
+
     if (latitude != null && longitude != null) {
       setState(() {
         _pickupLocation = LatLng(latitude.toDouble(), longitude.toDouble());
       });
+      await _getAddressFromCoordinates(latitude.toDouble(), longitude.toDouble());
     }
-    
+
     await _getUserLocation();
   }
 
-  Future<void> _getAddressFromCoordinates() async {
-    final latitude = _productData['latitude'];
-    final longitude = _productData['longitude'];
-    
-    if (latitude != null && longitude != null) {
+  Future<void> _getAddressFromCoordinates(double lat, double lng) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final parts = <String>[];
+
+        if (place.street != null && place.street!.isNotEmpty) parts.add(place.street!);
+        if (place.subLocality != null && place.subLocality!.isNotEmpty) parts.add(place.subLocality!);
+        if (place.locality != null && place.locality!.isNotEmpty) parts.add(place.locality!);
+        if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) parts.add(place.administrativeArea!);
+
+        setState(() {
+          _locationAddress = parts.isNotEmpty ? parts.join(', ') : 'Pickup location';
+        });
+      }
+    } catch (e) {
+      print('Error getting address: $e');
       setState(() {
         _locationAddress = _productData['location_text'] ?? 'Pickup location';
       });
@@ -115,7 +129,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      
+
       if (permission == LocationPermission.deniedForever) {
         setState(() {
           _locationError = 'Location permissions are permanently denied';
@@ -139,7 +153,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       } else if (_pickupLocation != null) {
         _animateCameraToPickup();
       }
-
     } catch (e) {
       print('Error getting location: $e');
       setState(() {
@@ -173,19 +186,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
     LatLngBounds bounds = LatLngBounds(
       southwest: LatLng(
-        _pickupLocation!.latitude < _userLocation!.latitude 
-            ? _pickupLocation!.latitude 
+        _pickupLocation!.latitude < _userLocation!.latitude
+            ? _pickupLocation!.latitude
             : _userLocation!.latitude,
-        _pickupLocation!.longitude < _userLocation!.longitude 
-            ? _pickupLocation!.longitude 
+        _pickupLocation!.longitude < _userLocation!.longitude
+            ? _pickupLocation!.longitude
             : _userLocation!.longitude,
       ),
       northeast: LatLng(
-        _pickupLocation!.latitude > _userLocation!.latitude 
-            ? _pickupLocation!.latitude 
+        _pickupLocation!.latitude > _userLocation!.latitude
+            ? _pickupLocation!.latitude
             : _userLocation!.latitude,
-        _pickupLocation!.longitude > _userLocation!.longitude 
-            ? _pickupLocation!.longitude 
+        _pickupLocation!.longitude > _userLocation!.longitude
+            ? _pickupLocation!.longitude
             : _userLocation!.longitude,
       ),
     );
@@ -214,9 +227,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Future<void> _openInMaps() async {
     if (_pickupLocation == null) return;
 
-    final url = 'https://www.google.com/maps/search/?api=1&query=${_pickupLocation!.latitude},${_pickupLocation!.longitude}';
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=${_pickupLocation!.latitude},${_pickupLocation!.longitude}';
     final uri = Uri.parse(url);
-    
+
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else {
@@ -232,7 +246,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   void _showRequestDialog() {
     int requestedQuantity = 1;
     final TextEditingController messageController = TextEditingController();
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -272,7 +286,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Product info
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -310,7 +324,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                             ),
                             Text(
-                              '${_currentQuantity} ${_productData['quantity_unit'] ?? 'units'} available',
+                              '$_currentQuantity ${_productData['quantity_unit'] ?? 'units'} available',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF39AC86),
@@ -322,9 +336,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Quantity selector
                 const Text(
                   'Quantity (Max 3)',
@@ -389,9 +403,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Message
                 const Text(
                   'Message (Optional)',
@@ -411,9 +425,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 Row(
                   children: [
                     Expanded(
@@ -444,10 +458,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
-                // Info text
+
                 Center(
                   child: Text(
                     'Maximum 3 items per request',
@@ -457,6 +470,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
             ),
           );
@@ -478,17 +492,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       );
 
       if (result['success'] == true) {
-        // Get the chat ID from the response
         final chatId = result['chat']['id'];
         final request = result['request'];
-        
-        // Navigate to chat with request card
+
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         final currentUser = authProvider.currentUser;
         final ownerId = _productData['user_id'];
         final ownerName = _productData['users']?['name'] ?? 'Gardener';
         final ownerImage = _productData['users']?['profile_image_url'] ?? '';
-        
+
         if (mounted) {
           Navigator.push(
             context,
@@ -512,7 +524,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
           );
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Request sent! Waiting for gardener to accept.'),
@@ -540,7 +552,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.currentUser;
     final ownerId = _productData['user_id'];
-    
+
     if (currentUser != null && ownerId != null) {
       if (currentUser['id'] == ownerId) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -551,7 +563,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         );
         return;
       }
-      
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -587,40 +599,40 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    final imageUrl = _productData['image_url'] ?? 
-                     (_productData['imageUrl'] ?? 
-                     'https://lh3.googleusercontent.com/aida-public/AB6AXuDpxtSHzBQyEV3GHn4NJkaTgBDJvhkEmCPE_fYJKhG9nq3CdJ8RU3QCqpXLtCOQ0icow0WTwxn7XXJ8jSbNHXkXZMVCyyETaL_dqDF1qohnoQyLQCJNBbBZzouqvthS4kIwmme_0n_kylD71ANsa-Skd2viP8puRco7WpiL_tDd4IaJGiS7hwFo3XL2PzoEIb37olQn2rW5s9WWiek2L7tIkKyg_AWACHrxMui4OL7w74QJq0LtcyXVlPEXyZ64Nk_redTn5MvsYrCs');
-    
+
+    final imageUrl = _productData['image_url'] ??
+        (_productData['imageUrl'] ??
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuDpxtSHzBQyEV3GHn4NJkaTgBDJvhkEmCPE_fYJKhG9nq3CdJ8RU3QCqpXLtCOQ0icow0WTwxn7XXJ8jSbNHXkXZMVCyyETaL_dqDF1qohnoQyLQCJNBbBZzouqvthS4kIwmme_0n_kylD71ANsa-Skd2viP8puRco7WpiL_tDd4IaJGiS7hwFo3XL2PzoEIb37olQn2rW5s9WWiek2L7tIkKyg_AWACHrxMui4OL7w74QJq0LtcyXVlPEXyZ64Nk_redTn5MvsYrCs');
+
     final name = _productData['name'] ?? 'Fresh Produce';
     final description = _productData['description'] ?? 'Freshly harvested from a local garden.';
     final quantityUnit = _productData['quantity_unit'] ?? 'lbs';
     final itemLeftText = _currentQuantity == 0 ? 'Claimed' : '$_currentQuantity $quantityUnit left';
-    
+
     final userData = _productData['users'] ?? {};
     final userName = userData['name'] ?? 'Local Gardener';
     final userImage = userData['profile_image_url'] ?? '';
-    
-    // Determine button state
+
     bool isOwner = false;
     final authProvider = Provider.of<AuthProvider>(context);
     final currentUser = authProvider.currentUser;
     if (currentUser != null) {
       isOwner = currentUser['id'] == _productData['user_id'];
     }
-    
+
     bool canRequest = !isOwner && _currentQuantity > 0 && !_hasExistingRequest;
     String buttonText = '';
     Color buttonColor = const Color(0xFF39AC86);
     bool buttonEnabled = false;
-    
+
     if (isOwner) {
       buttonText = 'Your Listing';
       buttonColor = Colors.grey;
       buttonEnabled = false;
     } else if (_hasExistingRequest) {
       if (_existingRequestStatus == 'pending') {
-        buttonText = 'Request Pending (${_existingRequestQuantity ?? ''} ${_existingRequestQuantity == 1 ? 'item' : 'items'})';
+        buttonText =
+            'Request Pending (${_existingRequestQuantity ?? ''} ${_existingRequestQuantity == 1 ? 'item' : 'items'})';
         buttonColor = Colors.orange;
         buttonEnabled = false;
       } else if (_existingRequestStatus == 'accepted') {
@@ -645,7 +657,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       buttonColor = const Color(0xFF39AC86);
       buttonEnabled = true;
     }
-    
+
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF1A2421) : const Color(0xFFF9F8F6),
       body: Stack(
@@ -704,8 +716,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ),
                     ],
                     border: Border.all(
-                      color: isDarkMode 
-                          ? const Color(0xFF3A4A44) 
+                      color: isDarkMode
+                          ? const Color(0xFF3A4A44)
                           : const Color(0xFFF0F2F1),
                     ),
                   ),
@@ -727,7 +739,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                               child: Text(
                                 _productData['status'] == 'available' && _currentQuantity > 0
-                                    ? 'Freshly Harvested' 
+                                    ? 'Freshly Harvested'
                                     : _productData['status'] ?? 'Available',
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -742,8 +754,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: _currentQuantity == 0 
-                                    ? Colors.grey 
+                                color: _currentQuantity == 0
+                                    ? Colors.grey
                                     : const Color(0xFFE59866),
                               ),
                             ),
@@ -775,8 +787,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         ),
                         const SizedBox(height: 24),
                         Divider(
-                          color: isDarkMode 
-                              ? const Color(0xFF3A4A44) 
+                          color: isDarkMode
+                              ? const Color(0xFF3A4A44)
                               : const Color(0xFFF0F2F1),
                         ),
                         const SizedBox(height: 20),
@@ -801,7 +813,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                         )
                                       : null,
                                 ),
-                                child: userImage.isEmpty 
+                                child: userImage.isEmpty
                                     ? const Icon(Icons.person, color: Color(0xFF39AC86))
                                     : null,
                               ),
@@ -816,8 +828,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      color: isDarkMode 
-                                          ? Colors.white 
+                                      color: isDarkMode
+                                          ? Colors.white
                                           : const Color(0xFF101816),
                                     ),
                                   ),
@@ -840,8 +852,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   vertical: 10,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: isDarkMode 
-                                      ? const Color(0xFF2D3A35) 
+                                  color: isDarkMode
+                                      ? const Color(0xFF2D3A35)
                                       : const Color(0xFFF9F8F6),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -862,6 +874,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ),
                 ),
 
+                // Garden Story section
                 Container(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -890,122 +903,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         description,
                         style: TextStyle(
                           fontSize: 16,
-                          color: isDarkMode 
-                              ? const Color(0xFFA1B8B0) 
+                          color: isDarkMode
+                              ? const Color(0xFFA1B8B0)
                               : const Color(0xFF5C8A7A),
                           height: 1.5,
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF39AC86).withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFF39AC86).withOpacity(0.1),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF39AC86).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.public,
-                                color: Color(0xFF39AC86),
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Sustainability Impact',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF39AC86),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Sourcing this locally saves ~1.2kg of CO2 transport emissions.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF39AC86),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_productData['pickup_instructions'] != null) ...[
-                        const SizedBox(height: 20),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE59866).withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFFE59866).withOpacity(0.1),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE59866).withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(
-                                  Icons.info_outline,
-                                  color: Color(0xFFE59866),
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Pickup Instructions',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFFE59866),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _productData['pickup_instructions'],
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFFE59866),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
 
+                // Pickup Location section
                 Container(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
@@ -1027,8 +935,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: isDarkMode 
-                                      ? Colors.white 
+                                  color: isDarkMode
+                                      ? Colors.white
                                       : const Color(0xFF101816),
                                 ),
                               ),
@@ -1144,7 +1052,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     child: Text('Location not available'),
                                   ),
                                 ),
-                              
+
                               if (_isLoadingLocation)
                                 Container(
                                   color: Colors.black.withOpacity(0.3),
@@ -1154,6 +1062,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     ),
                                   ),
                                 ),
+
                               Positioned(
                                 top: 8,
                                 right: 8,
@@ -1241,6 +1150,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ],
                                 ),
                               ),
+
                               Positioned(
                                 bottom: 8,
                                 right: 8,
@@ -1305,6 +1215,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ],
             ),
           ),
+
+          // Top nav bar
           Positioned(
             top: 0,
             left: 0,
@@ -1366,6 +1278,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
             ),
           ),
+
+          // Bottom action button
           Positioned(
             bottom: 0,
             left: 0,
@@ -1376,26 +1290,32 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 color: isDarkMode ? const Color(0xFF25322E) : Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color: isDarkMode 
-                        ? const Color(0xFF3A4A44) 
+                    color: isDarkMode
+                        ? const Color(0xFF3A4A44)
                         : const Color(0xFFF0F2F1),
                   ),
                 ),
               ),
               child: GestureDetector(
-                onTap: buttonEnabled ? (_existingRequestStatus == 'accepted' ? _navigateToMessages : _showRequestDialog) : null,
+                onTap: buttonEnabled
+                    ? (_existingRequestStatus == 'accepted'
+                        ? _navigateToMessages
+                        : _showRequestDialog)
+                    : null,
                 child: Container(
                   height: 56,
                   decoration: BoxDecoration(
                     color: _isRequesting ? Colors.grey : buttonColor,
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: buttonEnabled ? [
-                      BoxShadow(
-                        color: buttonColor.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ] : null,
+                    boxShadow: buttonEnabled
+                        ? [
+                            BoxShadow(
+                              color: buttonColor.withOpacity(0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Center(
                     child: _isRequesting
@@ -1462,12 +1382,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
 
 
+
+
 // import 'package:flutter/material.dart';
 // import 'package:google_maps_flutter/google_maps_flutter.dart';
 // import 'package:geolocator/geolocator.dart';
 // import 'package:url_launcher/url_launcher.dart';
 // import 'package:provider/provider.dart';
 // import 'messages_screen.dart';
+// import 'chat_screen.dart';
 // import 'providers/auth_provider.dart';
 // import 'services/api_service.dart';
 
@@ -1498,7 +1421,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //   // Product data
 //   late Map<String, dynamic> _productData;
 //   int _currentQuantity;
-//   bool _isClaiming = false;
+//   bool _isRequesting = false;
+//   bool _hasExistingRequest = false;
+//   String? _existingRequestStatus;
+//   int? _existingRequestQuantity;
 
 //   _ProductDetailsScreenState() : _currentQuantity = 0;
 
@@ -1509,6 +1435,29 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //     _currentQuantity = _productData['quantity'] ?? 0;
 //     _initializeLocation();
 //     _getAddressFromCoordinates();
+//     _checkExistingRequest();
+//   }
+
+//   Future<void> _checkExistingRequest() async {
+//     try {
+//       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+//       final currentUser = authProvider.currentUser;
+      
+//       if (currentUser == null) return;
+      
+//       final result = await _apiService.getUserProductRequest(_productData['id']);
+      
+//       if (result['success'] == true && result['request'] != null) {
+//         final request = result['request'];
+//         setState(() {
+//           _hasExistingRequest = true;
+//           _existingRequestStatus = request['status'];
+//           _existingRequestQuantity = request['quantity'];
+//         });
+//       }
+//     } catch (e) {
+//       print('Error checking existing request: $e');
+//     }
 //   }
 
 //   @override
@@ -1518,7 +1467,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //   }
 
 //   Future<void> _initializeLocation() async {
-//     // Get pickup location from product data
 //     final latitude = _productData['latitude'];
 //     final longitude = _productData['longitude'];
     
@@ -1528,7 +1476,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //       });
 //     }
     
-//     // Get user's current location
 //     await _getUserLocation();
 //   }
 
@@ -1537,8 +1484,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //     final longitude = _productData['longitude'];
     
 //     if (latitude != null && longitude != null) {
-//       // You can use a geocoding service here
-//       // For now, use the location_text from database
 //       setState(() {
 //         _locationAddress = _productData['location_text'] ?? 'Pickup location';
 //       });
@@ -1670,61 +1615,309 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //     }
 //   }
 
-//   Future<void> _claimItem() async {
-//     if (_currentQuantity <= 0) {
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         const SnackBar(
-//           content: Text('This item is no longer available'),
-//           backgroundColor: Colors.orange,
-//         ),
-//       );
-//       return;
-//     }
+//   void _showRequestDialog() {
+//     int requestedQuantity = 1;
+//     final TextEditingController messageController = TextEditingController();
+    
+//     showModalBottomSheet(
+//       context: context,
+//       isScrollControlled: true,
+//       shape: const RoundedRectangleBorder(
+//         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+//       ),
+//       builder: (context) => StatefulBuilder(
+//         builder: (context, setSheetState) {
+//           return Padding(
+//             padding: EdgeInsets.only(
+//               bottom: MediaQuery.of(context).viewInsets.bottom,
+//               left: 24,
+//               right: 24,
+//               top: 24,
+//             ),
+//             child: Column(
+//               mainAxisSize: MainAxisSize.min,
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 const Center(
+//                   child: Text(
+//                     'Request Produce',
+//                     style: TextStyle(
+//                       fontSize: 20,
+//                       fontWeight: FontWeight.bold,
+//                     ),
+//                   ),
+//                 ),
+//                 const SizedBox(height: 8),
+//                 const Center(
+//                   child: Text(
+//                     'Send a request to the gardener',
+//                     style: TextStyle(
+//                       fontSize: 14,
+//                       color: Colors.grey,
+//                     ),
+//                   ),
+//                 ),
+//                 const SizedBox(height: 24),
+                
+//                 // Product info
+//                 Container(
+//                   padding: const EdgeInsets.all(12),
+//                   decoration: BoxDecoration(
+//                     color: const Color(0xFF39AC86).withOpacity(0.1),
+//                     borderRadius: BorderRadius.circular(12),
+//                   ),
+//                   child: Row(
+//                     children: [
+//                       ClipRRect(
+//                         borderRadius: BorderRadius.circular(8),
+//                         child: Image.network(
+//                           _productData['image_url'] ?? '',
+//                           width: 50,
+//                           height: 50,
+//                           fit: BoxFit.cover,
+//                           errorBuilder: (context, error, stack) => Container(
+//                             width: 50,
+//                             height: 50,
+//                             color: Colors.grey[200],
+//                             child: const Icon(Icons.eco, color: Color(0xFF39AC86)),
+//                           ),
+//                         ),
+//                       ),
+//                       const SizedBox(width: 12),
+//                       Expanded(
+//                         child: Column(
+//                           crossAxisAlignment: CrossAxisAlignment.start,
+//                           children: [
+//                             Text(
+//                               _productData['name'] ?? 'Fresh Produce',
+//                               style: const TextStyle(
+//                                 fontSize: 16,
+//                                 fontWeight: FontWeight.bold,
+//                               ),
+//                             ),
+//                             Text(
+//                               '${_currentQuantity} ${_productData['quantity_unit'] ?? 'units'} available',
+//                               style: const TextStyle(
+//                                 fontSize: 12,
+//                                 color: Color(0xFF39AC86),
+//                               ),
+//                             ),
+//                           ],
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+                
+//                 const SizedBox(height: 20),
+                
+//                 // Quantity selector
+//                 const Text(
+//                   'Quantity (Max 3)',
+//                   style: TextStyle(
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.bold,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 8),
+//                 Container(
+//                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+//                   decoration: BoxDecoration(
+//                     border: Border.all(color: Colors.grey[300]!),
+//                     borderRadius: BorderRadius.circular(12),
+//                   ),
+//                   child: Row(
+//                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+//                     children: [
+//                       GestureDetector(
+//                         onTap: () {
+//                           if (requestedQuantity > 1) {
+//                             setSheetState(() {
+//                               requestedQuantity--;
+//                             });
+//                           }
+//                         },
+//                         child: Container(
+//                           width: 40,
+//                           height: 40,
+//                           decoration: BoxDecoration(
+//                             color: Colors.grey[200],
+//                             shape: BoxShape.circle,
+//                           ),
+//                           child: const Icon(Icons.remove, color: Color(0xFF39AC86)),
+//                         ),
+//                       ),
+//                       Text(
+//                         '$requestedQuantity',
+//                         style: const TextStyle(
+//                           fontSize: 24,
+//                           fontWeight: FontWeight.bold,
+//                         ),
+//                       ),
+//                       GestureDetector(
+//                         onTap: () {
+//                           if (requestedQuantity < 3 && requestedQuantity < _currentQuantity) {
+//                             setSheetState(() {
+//                               requestedQuantity++;
+//                             });
+//                           }
+//                         },
+//                         child: Container(
+//                           width: 40,
+//                           height: 40,
+//                           decoration: BoxDecoration(
+//                             color: Colors.grey[200],
+//                             shape: BoxShape.circle,
+//                           ),
+//                           child: const Icon(Icons.add, color: Color(0xFF39AC86)),
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+                
+//                 const SizedBox(height: 20),
+                
+//                 // Message
+//                 const Text(
+//                   'Message (Optional)',
+//                   style: TextStyle(
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.bold,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 8),
+//                 TextField(
+//                   controller: messageController,
+//                   maxLines: 3,
+//                   decoration: InputDecoration(
+//                     hintText: 'Add a message to the gardener...',
+//                     border: OutlineInputBorder(
+//                       borderRadius: BorderRadius.circular(12),
+//                     ),
+//                   ),
+//                 ),
+                
+//                 const SizedBox(height: 24),
+                
+//                 Row(
+//                   children: [
+//                     Expanded(
+//                       child: OutlinedButton(
+//                         onPressed: () => Navigator.pop(context),
+//                         style: OutlinedButton.styleFrom(
+//                           padding: const EdgeInsets.symmetric(vertical: 14),
+//                         ),
+//                         child: const Text('Cancel'),
+//                       ),
+//                     ),
+//                     const SizedBox(width: 12),
+//                     Expanded(
+//                       child: ElevatedButton(
+//                         onPressed: () async {
+//                           Navigator.pop(context);
+//                           await _sendRequest(requestedQuantity, messageController.text);
+//                         },
+//                         style: ElevatedButton.styleFrom(
+//                           backgroundColor: const Color(0xFF39AC86),
+//                           padding: const EdgeInsets.symmetric(vertical: 14),
+//                         ),
+//                         child: const Text(
+//                           'Send Request',
+//                           style: TextStyle(fontWeight: FontWeight.bold),
+//                         ),
+//                       ),
+//                     ),
+//                   ],
+//                 ),
+                
+//                 const SizedBox(height: 16),
+                
+//                 // Info text
+//                 Center(
+//                   child: Text(
+//                     'Maximum 3 items per request',
+//                     style: TextStyle(
+//                       fontSize: 12,
+//                       color: Colors.grey[600],
+//                     ),
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           );
+//         },
+//       ),
+//     );
+//   }
 
+//   Future<void> _sendRequest(int quantity, String message) async {
 //     setState(() {
-//       _isClaiming = true;
+//       _isRequesting = true;
 //     });
 
 //     try {
-//       final newQuantity = _currentQuantity - 1;
-      
-//       final result = await _apiService.updateSharedItemQuantity(
-//         _productData['id'],
-//         newQuantity,
+//       final result = await _apiService.createProductRequest(
+//         productId: _productData['id'],
+//         quantity: quantity,
+//         message: message,
 //       );
 
 //       if (result['success'] == true) {
-//         setState(() {
-//           _currentQuantity = newQuantity;
-//           _productData['quantity'] = newQuantity;
-//         });
-
+//         // Get the chat ID from the response
+//         final chatId = result['chat']['id'];
+//         final request = result['request'];
+        
+//         // Navigate to chat with request card
+//         final authProvider = Provider.of<AuthProvider>(context, listen: false);
+//         final currentUser = authProvider.currentUser;
+//         final ownerId = _productData['user_id'];
+//         final ownerName = _productData['users']?['name'] ?? 'Gardener';
+//         final ownerImage = _productData['users']?['profile_image_url'] ?? '';
+        
+//         if (mounted) {
+//           Navigator.push(
+//             context,
+//             MaterialPageRoute(
+//               builder: (context) => ChatScreen(
+//                 itemName: _productData['name'] ?? 'Produce',
+//                 userName: ownerName,
+//                 userImage: ownerImage,
+//                 productId: _productData['id'],
+//                 productStatus: _productData['status'],
+//                 quantity: _currentQuantity,
+//                 recipientId: ownerId,
+//                 chatId: chatId,
+//                 requestData: {
+//                   'id': request['id'],
+//                   'quantity': quantity,
+//                   'status': 'pending',
+//                   'message': message,
+//                 },
+//               ),
+//             ),
+//           );
+//         }
+        
 //         ScaffoldMessenger.of(context).showSnackBar(
-//           SnackBar(
-//             content: Text('Successfully claimed! ${newQuantity > 0 ? '$newQuantity left' : 'Last item claimed'}'),
+//           const SnackBar(
+//             content: Text('Request sent! Waiting for gardener to accept.'),
 //             backgroundColor: Colors.green,
 //           ),
 //         );
-
-//         if (newQuantity == 0) {
-//           await _apiService.updateSharedItemStatus(
-//             _productData['id'],
-//             'claimed',
-//           );
-//         }
 //       } else {
-//         throw Exception(result['error']);
+//         throw Exception(result['error'] ?? 'Failed to send request');
 //       }
 //     } catch (e) {
 //       ScaffoldMessenger.of(context).showSnackBar(
 //         SnackBar(
-//           content: Text('Failed to claim: $e'),
+//           content: Text('Failed to send request: $e'),
 //           backgroundColor: Colors.red,
 //         ),
 //       );
 //     } finally {
 //       setState(() {
-//         _isClaiming = false;
+//         _isRequesting = false;
 //       });
 //     }
 //   }
@@ -1794,6 +1987,51 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //     final userName = userData['name'] ?? 'Local Gardener';
 //     final userImage = userData['profile_image_url'] ?? '';
     
+//     // Determine button state
+//     bool isOwner = false;
+//     final authProvider = Provider.of<AuthProvider>(context);
+//     final currentUser = authProvider.currentUser;
+//     if (currentUser != null) {
+//       isOwner = currentUser['id'] == _productData['user_id'];
+//     }
+    
+//     bool canRequest = !isOwner && _currentQuantity > 0 && !_hasExistingRequest;
+//     String buttonText = '';
+//     Color buttonColor = const Color(0xFF39AC86);
+//     bool buttonEnabled = false;
+    
+//     if (isOwner) {
+//       buttonText = 'Your Listing';
+//       buttonColor = Colors.grey;
+//       buttonEnabled = false;
+//     } else if (_hasExistingRequest) {
+//       if (_existingRequestStatus == 'pending') {
+//         buttonText = 'Request Pending (${_existingRequestQuantity ?? ''} ${_existingRequestQuantity == 1 ? 'item' : 'items'})';
+//         buttonColor = Colors.orange;
+//         buttonEnabled = false;
+//       } else if (_existingRequestStatus == 'accepted') {
+//         buttonText = 'Request Accepted! Contact Gardener';
+//         buttonColor = const Color(0xFF39AC86);
+//         buttonEnabled = true;
+//       } else if (_existingRequestStatus == 'declined') {
+//         buttonText = 'Request Declined';
+//         buttonColor = Colors.red;
+//         buttonEnabled = false;
+//       } else {
+//         buttonText = 'Already Requested';
+//         buttonColor = Colors.grey;
+//         buttonEnabled = false;
+//       }
+//     } else if (_currentQuantity == 0) {
+//       buttonText = 'All Claimed';
+//       buttonColor = Colors.grey;
+//       buttonEnabled = false;
+//     } else {
+//       buttonText = 'Request Produce';
+//       buttonColor = const Color(0xFF39AC86);
+//       buttonEnabled = true;
+//     }
+    
 //     return Scaffold(
 //       backgroundColor: isDarkMode ? const Color(0xFF1A2421) : const Color(0xFFF9F8F6),
 //       body: Stack(
@@ -1801,7 +2039,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //           SingleChildScrollView(
 //             child: Column(
 //               children: [
-//                 // Hero Image Section
 //                 SizedBox(
 //                   height: MediaQuery.of(context).size.height * 0.45,
 //                   width: double.infinity,
@@ -1824,7 +2061,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           );
 //                         },
 //                       ),
-//                       // Gradient overlay for better text visibility
 //                       Container(
 //                         decoration: BoxDecoration(
 //                           gradient: LinearGradient(
@@ -1841,7 +2077,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                   ),
 //                 ),
 
-//                 // Floating Info Card
 //                 Container(
 //                   margin: const EdgeInsets.fromLTRB(16, -80, 16, 0),
 //                   decoration: BoxDecoration(
@@ -1900,9 +2135,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                             ),
 //                           ],
 //                         ),
-
 //                         const SizedBox(height: 16),
-
 //                         Text(
 //                           name,
 //                           style: TextStyle(
@@ -1913,9 +2146,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           ),
 //                           textAlign: TextAlign.center,
 //                         ),
-
 //                         const SizedBox(height: 20),
-
 //                         SingleChildScrollView(
 //                           scrollDirection: Axis.horizontal,
 //                           child: Row(
@@ -1928,17 +2159,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                             ],
 //                           ),
 //                         ),
-
 //                         const SizedBox(height: 24),
-
 //                         Divider(
 //                           color: isDarkMode 
 //                               ? const Color(0xFF3A4A44) 
 //                               : const Color(0xFFF0F2F1),
 //                         ),
-
 //                         const SizedBox(height: 20),
-
 //                         Row(
 //                           children: [
 //                             GestureDetector(
@@ -1965,9 +2192,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                     : null,
 //                               ),
 //                             ),
-
 //                             const SizedBox(width: 12),
-
 //                             Expanded(
 //                               child: Column(
 //                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1993,7 +2218,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                 ],
 //                               ),
 //                             ),
-
 //                             GestureDetector(
 //                               onTap: _navigateToMessages,
 //                               child: Container(
@@ -2024,7 +2248,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                   ),
 //                 ),
 
-//                 // Description Section
 //                 Container(
 //                   padding: const EdgeInsets.all(24),
 //                   child: Column(
@@ -2048,9 +2271,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           ),
 //                         ],
 //                       ),
-
 //                       const SizedBox(height: 16),
-
 //                       Text(
 //                         description,
 //                         style: TextStyle(
@@ -2061,9 +2282,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           height: 1.5,
 //                         ),
 //                       ),
-
 //                       const SizedBox(height: 24),
-
 //                       Container(
 //                         padding: const EdgeInsets.all(16),
 //                         decoration: BoxDecoration(
@@ -2115,7 +2334,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           ],
 //                         ),
 //                       ),
-
 //                       if (_productData['pickup_instructions'] != null) ...[
 //                         const SizedBox(height: 20),
 //                         Container(
@@ -2174,7 +2392,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                   ),
 //                 ),
 
-//                 // Location Section with Interactive Map
 //                 Container(
 //                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
 //                   child: Column(
@@ -2224,10 +2441,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                             ),
 //                         ],
 //                       ),
-
 //                       const SizedBox(height: 8),
-
-//                       // Location Address
 //                       if (_locationAddress != null)
 //                         Container(
 //                           padding: const EdgeInsets.symmetric(
@@ -2258,10 +2472,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                             ],
 //                           ),
 //                         ),
-
 //                       const SizedBox(height: 16),
-
-//                       // Interactive Map
 //                       Container(
 //                         height: 300,
 //                         decoration: BoxDecoration(
@@ -2329,14 +2540,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                     ),
 //                                   ),
 //                                 ),
-
-//                               // Map Controls
 //                               Positioned(
 //                                 top: 8,
 //                                 right: 8,
 //                                 child: Column(
 //                                   children: [
-//                                     // Zoom In Button
 //                                     Container(
 //                                       margin: const EdgeInsets.only(bottom: 4),
 //                                       decoration: BoxDecoration(
@@ -2365,7 +2573,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                         constraints: const BoxConstraints(),
 //                                       ),
 //                                     ),
-//                                     // Zoom Out Button
 //                                     Container(
 //                                       margin: const EdgeInsets.only(bottom: 4),
 //                                       decoration: BoxDecoration(
@@ -2394,7 +2601,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                         constraints: const BoxConstraints(),
 //                                       ),
 //                                     ),
-//                                     // My Location Button
 //                                     Container(
 //                                       decoration: BoxDecoration(
 //                                         color: Colors.white,
@@ -2421,8 +2627,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                                   ],
 //                                 ),
 //                               ),
-
-//                               // Open in Maps Button
 //                               Positioned(
 //                                 bottom: 8,
 //                                 right: 8,
@@ -2470,7 +2674,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                           ),
 //                         ),
 //                       ),
-
 //                       if (_locationError != null) ...[
 //                         const SizedBox(height: 8),
 //                         Text(
@@ -2484,13 +2687,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                     ],
 //                   ),
 //                 ),
-
 //                 const SizedBox(height: 100),
 //               ],
 //             ),
 //           ),
-
-//           // Sticky Back Button and Title
 //           Positioned(
 //             top: 0,
 //             left: 0,
@@ -2526,7 +2726,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                       ),
 //                     ),
 //                   ),
-
 //                   const Text(
 //                     'Produce Details',
 //                     style: TextStyle(
@@ -2536,7 +2735,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                       letterSpacing: 0.5,
 //                     ),
 //                   ),
-
 //                   Container(
 //                     width: 40,
 //                     height: 40,
@@ -2554,8 +2752,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //               ),
 //             ),
 //           ),
-
-//           // Sticky Bottom Button
 //           Positioned(
 //             bottom: 0,
 //             left: 0,
@@ -2572,104 +2768,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //                   ),
 //                 ),
 //               ),
-//               child: Row(
-//                 children: [
-//                   Column(
-//                     crossAxisAlignment: CrossAxisAlignment.start,
-//                     children: [
-//                       const Text(
-//                         'Contribution',
-//                         style: TextStyle(
-//                           fontSize: 12,
-//                           fontWeight: FontWeight.bold,
-//                           color: Color(0xFF5C8A7A),
-//                           letterSpacing: 1,
-//                         ),
+//               child: GestureDetector(
+//                 onTap: buttonEnabled ? (_existingRequestStatus == 'accepted' ? _navigateToMessages : _showRequestDialog) : null,
+//                 child: Container(
+//                   height: 56,
+//                   decoration: BoxDecoration(
+//                     color: _isRequesting ? Colors.grey : buttonColor,
+//                     borderRadius: BorderRadius.circular(12),
+//                     boxShadow: buttonEnabled ? [
+//                       BoxShadow(
+//                         color: buttonColor.withOpacity(0.3),
+//                         blurRadius: 10,
+//                         offset: const Offset(0, 4),
 //                       ),
-//                       const SizedBox(height: 4),
-//                       const Text(
-//                         '\$0.00',
-//                         style: TextStyle(
-//                           fontSize: 24,
-//                           fontWeight: FontWeight.bold,
-//                           color: Color(0xFF101816),
-//                         ),
-//                       ),
-//                     ],
+//                     ] : null,
 //                   ),
-
-//                   const SizedBox(width: 16),
-
-//                   Expanded(
-//                     child: _currentQuantity == 0
-//                         ? Container(
-//                             height: 56,
-//                             decoration: BoxDecoration(
-//                               color: Colors.grey,
-//                               borderRadius: BorderRadius.circular(12),
-//                             ),
-//                             child: const Center(
-//                               child: Text(
-//                                 'Claimed',
-//                                 style: TextStyle(
-//                                   color: Colors.white,
-//                                   fontSize: 16,
-//                                   fontWeight: FontWeight.bold,
-//                                 ),
-//                               ),
+//                   child: Center(
+//                     child: _isRequesting
+//                         ? const SizedBox(
+//                             width: 24,
+//                             height: 24,
+//                             child: CircularProgressIndicator(
+//                               strokeWidth: 2,
+//                               color: Colors.white,
 //                             ),
 //                           )
-//                         : GestureDetector(
-//                             onTap: _isClaiming ? null : _claimItem,
-//                             child: Container(
-//                               height: 56,
-//                               decoration: BoxDecoration(
-//                                 color: _isClaiming 
-//                                     ? Colors.grey 
-//                                     : const Color(0xFF39AC86),
-//                                 borderRadius: BorderRadius.circular(12),
-//                                 boxShadow: _isClaiming ? null : [
-//                                   BoxShadow(
-//                                     color: const Color(0xFF39AC86).withOpacity(0.3),
-//                                     blurRadius: 10,
-//                                     offset: const Offset(0, 4),
-//                                   ),
-//                                 ],
-//                               ),
-//                               child: Center(
-//                                 child: _isClaiming
-//                                     ? const SizedBox(
-//                                         width: 24,
-//                                         height: 24,
-//                                         child: CircularProgressIndicator(
-//                                           strokeWidth: 2,
-//                                           color: Colors.white,
-//                                         ),
-//                                       )
-//                                     : const Row(
-//                                         mainAxisAlignment: MainAxisAlignment.center,
-//                                         children: [
-//                                           Icon(
-//                                             Icons.shopping_basket,
-//                                             color: Colors.white,
-//                                             size: 20,
-//                                           ),
-//                                           SizedBox(width: 8),
-//                                           Text(
-//                                             'Claim Produce',
-//                                             style: TextStyle(
-//                                               color: Colors.white,
-//                                               fontSize: 16,
-//                                               fontWeight: FontWeight.bold,
-//                                             ),
-//                                           ),
-//                                         ],
-//                                       ),
-//                               ),
+//                         : Text(
+//                             buttonText,
+//                             style: const TextStyle(
+//                               color: Colors.white,
+//                               fontSize: 16,
+//                               fontWeight: FontWeight.bold,
 //                             ),
 //                           ),
 //                   ),
-//                 ],
+//                 ),
 //               ),
 //             ),
 //           ),
@@ -2706,6 +2839,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 //     );
 //   }
 // }
+
+
+
+
+
+
+
 
 
 
