@@ -85,97 +85,103 @@ class _ShareScreenState extends State<ShareScreen> with SingleTickerProviderStat
 
   // ─────────────── AI Image Analysis ───────────────
 
-  Future<void> _analyzeImageAndAutoFill(Uint8List imageBytes) async {
-    setState(() {
-      _isAnalyzingImage = true;
-      _autoFillDone = false;
-    });
+Future<void> _analyzeImageAndAutoFill(Uint8List imageBytes) async {
+  setState(() {
+    _isAnalyzingImage = true;
+    _autoFillDone = false;
+  });
 
-    try {
-      final base64Image = base64Encode(imageBytes);
+  try {
+    // Get auth token
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+    
+    if (token == null) {
+      print('No auth token available');
+      setState(() => _isAnalyzingImage = false);
+      return;
+    }
 
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-        },
-        body: jsonEncode({
-          'model': 'claude-sonnet-4-20250514',
-          'max_tokens': 300,
-          'messages': [
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'image',
-                  'source': {
-                    'type': 'base64',
-                    'media_type': 'image/jpeg',
-                    'data': base64Image,
-                  },
-                },
-                {
-                  'type': 'text',
-                  'text': '''You are an expert at identifying garden produce, fruits, vegetables, herbs, and crops from images.
-Analyze this image and respond ONLY with valid JSON in this exact format (no explanation, no markdown):
-{
-  "name": "short produce name (e.g. Heirloom Roma Tomatoes)",
-  "description": "2-3 sentence natural, warm description of the produce as if sharing with neighbors. Mention freshness, color, taste, or use.",
-  "category": "one of: Vegetables, Fruits, Herbs, Seeds, Other"
-}
-If you cannot identify produce in the image, respond with:
-{"name": "", "description": "", "category": "Other"}''',
-                },
-              ],
-            },
-          ],
-        }),
-      );
+    final base64Image = base64Encode(imageBytes);
+    
+    // Call YOUR backend instead of Claude directly
+    final response = await http.post(
+      Uri.parse('${_apiService.apiBaseUrl}/api/ai/analyze-image'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'imageBase64': base64Image,
+        'contentType': 'image/jpeg',
+      }),
+    );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final rawText = (data['content'] as List)
-            .where((b) => b['type'] == 'text')
-            .map((b) => b['text'] as String)
-            .join('');
+    print('📥 AI Analysis Response Status: ${response.statusCode}');
+    print('📥 Response body: ${response.body}');
 
-        // Clean any accidental markdown fences
-        final cleaned = rawText
-            .replaceAll('```json', '')
-            .replaceAll('```', '')
-            .trim();
+    final result = jsonDecode(response.body);
+    
+    if (result['success'] == true && mounted) {
+      final data = result['data'];
+      final name = (data['name'] as String? ?? '').trim();
+      final description = (data['description'] as String? ?? '').trim();
+      final category = (data['category'] as String? ?? '').trim();
 
-        final parsed = jsonDecode(cleaned) as Map<String, dynamic>;
-
-        final name = (parsed['name'] as String? ?? '').trim();
-        final description = (parsed['description'] as String? ?? '').trim();
-        final category = (parsed['category'] as String? ?? '').trim();
-
-        if (name.isNotEmpty && mounted) {
-          setState(() {
-            _itemNameController.text = name;
-            _descriptionController.text = description;
-            if (categories.contains(category)) {
-              _selectedCategory = category;
-            }
-            _autoFillDone = true;
-          });
-          _bannerController.forward(from: 0);
-
-          // Auto-dismiss the success banner after 3s
-          Future.delayed(const Duration(seconds: 3), () {
-            if (mounted) _bannerController.reverse();
-          });
+      if (name.isNotEmpty) {
+        print('✅ AI identified: $name (Category: $category)');
+        setState(() {
+          _itemNameController.text = name;
+          _descriptionController.text = description;
+          if (categories.contains(category)) {
+            _selectedCategory = category;
+          }
+          _autoFillDone = true;
+        });
+        _bannerController.forward(from: 0);
+        
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _bannerController.reverse();
+        });
+      } else {
+        print('❌ AI could not identify produce in image');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not identify produce. Please fill in the details manually.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
         }
       }
-    } catch (e) {
-      print('AI image analysis error: $e');
-      // Silently fail — user can fill manually
-    } finally {
-      if (mounted) setState(() => _isAnalyzingImage = false);
+    } else {
+      print('❌ AI Analysis failed: ${result['error']}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI analysis failed: ${result['error'] ?? 'Unknown error'}'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
+  } catch (e) {
+    print('❌ AI image analysis error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to analyze image: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isAnalyzingImage = false);
   }
+}
 
   // ─────────────── Location ───────────────
 
