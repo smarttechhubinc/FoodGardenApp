@@ -434,6 +434,23 @@ class _GardenScreenState extends State<GardenScreen> with TickerProviderStateMix
     );
   }
 
+  // ADD THIS MISSING METHOD
+  Widget _buildLoadingScreen(bool isDarkMode) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Color(0xFF39AC86)),
+          const SizedBox(height: 20),
+          Text(
+            'Loading your garden...',
+            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─────────────── Search Bar ───────────────
 
   Widget _buildSearchBar(bool isDarkMode) {
@@ -1608,7 +1625,8 @@ class _GardenScreenState extends State<GardenScreen> with TickerProviderStateMix
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(7, (index) {
                 final height = maxHarvest > 0 ? (_weeklyHarvest[index] / maxHarvest) : 0;
-                return _buildChartBar(height, _weekDays[index], _weeklyHarvest[index]);
+                // FIXED: Convert height to double explicitly
+                return _buildChartBar(height.toDouble(), _weekDays[index], _weeklyHarvest[index]);
               }),
             ),
           ),
@@ -1700,9 +1718,6 @@ class _GardenScreenState extends State<GardenScreen> with TickerProviderStateMix
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 }
-
-
-
 
 
 
