@@ -337,28 +337,57 @@ Future<void> _analyzeImageAndAutoFill(Uint8List imageBytes) async {
 
   // ─────────────── Image Picker ───────────────
 
-  Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 85,
-    );
+Future<void> _pickImage() async {
+  final ImagePicker picker = ImagePicker();
+  final XFile? image = await picker.pickImage(
+    source: ImageSource.gallery,
+    maxWidth: 800,
+    maxHeight: 800,
+    imageQuality: 70, // Reduced quality to 70% for smaller size
+  );
 
-    if (image != null && mounted) {
-      final bytes = await image.readAsBytes();
+  if (image != null && mounted) {
+    final bytes = await image.readAsBytes();
+    final sizeInMB = bytes.length / (1024 * 1024);
+    print('📸 Image size: ${sizeInMB.toStringAsFixed(2)}MB');
+    
+    if (sizeInMB > 5) {
+      // Image still too large, compress more
+      final compressedBytes = await _compressImageFurther(image);
+      setState(() {
+        _selectedImage = image;
+        _selectedImageBytes = compressedBytes;
+        _uploadedImageUrl = null;
+        _autoFillDone = false;
+      });
+      await _analyzeImageAndAutoFill(compressedBytes);
+    } else {
       setState(() {
         _selectedImage = image;
         _selectedImageBytes = bytes;
         _uploadedImageUrl = null;
         _autoFillDone = false;
       });
-
-      // Auto-fill name & description using AI
       await _analyzeImageAndAutoFill(bytes);
     }
   }
+}
+
+Future<Uint8List> _compressImageFurther(XFile image) async {
+  // You can use flutter_image_compress package for better compression
+  // For now, just read with lower quality
+  final ImagePicker picker = ImagePicker();
+  final XFile? compressed = await picker.pickImage(
+    source: ImageSource.gallery,
+    maxWidth: 600,
+    maxHeight: 600,
+    imageQuality: 50,
+  );
+  if (compressed != null) {
+    return await compressed.readAsBytes();
+  }
+  return await image.readAsBytes();
+}
 
   Future<String?> _uploadImage() async {
     if (_selectedImage == null || _selectedImageBytes == null) return null;
