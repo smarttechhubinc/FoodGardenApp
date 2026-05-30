@@ -1131,6 +1131,83 @@ Future<Map<String, dynamic>> getIncomingRequests() async {
     }
   }
 
+
+
+// Archive a crop
+Future<Map<String, dynamic>> archiveCrop(String cropId, String reason) async {
+  try {
+    print('🔄 Archiving crop: $cropId');
+    print('📤 Reason: $reason');
+    
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/crops/$cropId/archive'),
+      headers: headers,
+      body: jsonEncode({
+        'reason': reason,
+      }),
+    );
+
+    print('📥 Response status: ${response.statusCode}');
+    print('📥 Response body: ${response.body}');
+
+    return jsonDecode(response.body);
+  } catch (e) {
+    print('❌ Archive crop error: $e');
+    return {
+      'success': false,
+      'error': 'Connection error: $e',
+    };
+  }
+}
+
+// Restore a crop from archive
+Future<Map<String, dynamic>> restoreCrop(String cropId) async {
+  try {
+    print('🔄 Restoring crop: $cropId');
+    
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/crops/$cropId/restore'),
+      headers: headers,
+    );
+
+    print('📥 Response status: ${response.statusCode}');
+    print('📥 Response body: ${response.body}');
+
+    return jsonDecode(response.body);
+  } catch (e) {
+    print('❌ Restore crop error: $e');
+    return {
+      'success': false,
+      'error': 'Connection error: $e',
+    };
+  }
+}
+
+// Permanently delete a crop
+Future<Map<String, dynamic>> deleteCropPermanent(String cropId) async {
+  try {
+    print('🔄 Deleting crop permanently: $cropId');
+    
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/crops/$cropId/permanent'),
+      headers: headers,
+    );
+
+    print('📥 Response status: ${response.statusCode}');
+    print('📥 Response body: ${response.body}');
+
+    return jsonDecode(response.body);
+  } catch (e) {
+    print('❌ Delete crop error: $e');
+    return {
+      'success': false,
+      'error': 'Connection error: $e',
+    };
+  }
+}
+
+  
+
   // ============ CHAT METHODS ============
 
   Future<Map<String, dynamic>> getUserChats() async {
