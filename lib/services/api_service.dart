@@ -623,6 +623,45 @@ class ApiService {
     }
   }
 
+
+
+
+// Get my requests (as requester)
+Future<Map<String, dynamic>> getMyRequests() async {
+  try {
+    print('🔄 Getting my requests');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/my-requests'),
+      headers: headers,
+    );
+    print('📥 Response status: ${response.statusCode}');
+    return jsonDecode(response.body);
+  } catch (e) {
+    print('❌ Get my requests error: $e');
+    return {'success': false, 'requests': []};
+  }
+}
+
+// Get incoming requests (as owner)
+Future<Map<String, dynamic>> getIncomingRequests() async {
+  try {
+    print('🔄 Getting incoming requests');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/incoming-requests'),
+      headers: headers,
+    );
+    print('📥 Response status: ${response.statusCode}');
+    return jsonDecode(response.body);
+  } catch (e) {
+    print('❌ Get incoming requests error: $e');
+    return {'success': false, 'requests': []};
+  }
+}
+
+
+
+  
+
   // ============ GARDEN & CROPS METHODS ============
 
   Future<Map<String, dynamic>> getUserCrops() async {
