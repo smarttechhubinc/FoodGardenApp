@@ -72,6 +72,10 @@ class _AllCropsScreenState extends State<AllCropsScreen>
   }
 
   Future<void> _loadCrops({bool forceRefresh = false}) async {
+    if (!forceRefresh && _allCrops.isNotEmpty && !_isRefreshing) {
+      return;
+    }
+    
     setState(() {
       _isLoading = true;
     });
@@ -84,7 +88,7 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         setState(() {
           _allCrops = allCrops.where((crop) => crop['is_archived'] != true).toList();
           _archivedCrops = allCrops.where((crop) => crop['is_archived'] == true).toList();
-          _filteredCrops = _allCrops;
+          _filteredCrops = _selectedTabIndex == 0 ? _allCrops : _archivedCrops;
         });
       }
     } catch (e) {
@@ -98,10 +102,12 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         );
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-        _isRefreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -189,7 +195,7 @@ class _AllCropsScreenState extends State<AllCropsScreen>
     String? selectedReason = _archiveReasons.first;
     String? customReason;
     
-    await showDialog(
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -263,57 +269,11 @@ class _AllCropsScreenState extends State<AllCropsScreen>
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  
-                  final reason = selectedReason == 'Other' 
-                      ? customReason ?? 'Other' 
-                      : selectedReason;
-                  
-                  // Show loading
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (context) => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                  
-                  try {
-                    final result = await _apiService.archiveCrop(
-                      crop['id'],
-                      reason ?? 'Unknown',
-                    );
-                    
-                    if (mounted) Navigator.pop(context);
-                    
-                    if (result['success'] == true) {
-                      await _refreshCrops();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('"${crop['name']}" has been archived.'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } else {
-                      throw Exception(result['error']);
-                    }
-                  } catch (e) {
-                    if (mounted) Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to archive: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                },
+                onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                 ),
@@ -324,10 +284,59 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         },
       ),
     );
+    
+    if (result != true) return;
+    
+    final reason = selectedReason == 'Other' 
+        ? customReason ?? 'Other' 
+        : selectedReason!;
+    
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      final archiveResult = await _apiService.archiveCrop(
+        crop['id'],
+        reason,
+      );
+      
+      if (mounted) Navigator.pop(context); // Close loading
+      
+      if (archiveResult['success'] == true) {
+        // Refresh the crops list
+        await _refreshCrops();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${crop['name']}" has been archived.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception(archiveResult['error']);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to archive: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _restoreCrop(Map<String, dynamic> crop) async {
-    showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Row(
@@ -342,49 +351,11 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-              
-              try {
-                final result = await _apiService.restoreCrop(crop['id']);
-                
-                if (mounted) Navigator.pop(context);
-                
-                if (result['success'] == true) {
-                  await _refreshCrops();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('"${crop['name']}" has been restored!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } else {
-                  throw Exception(result['error']);
-                }
-              } catch (e) {
-                if (mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to restore: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
             ),
@@ -393,10 +364,49 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         ],
       ),
     );
+    
+    if (confirm != true) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      final result = await _apiService.restoreCrop(crop['id']);
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (result['success'] == true) {
+        await _refreshCrops();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${crop['name']}" has been restored!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception(result['error']);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to restore: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _deletePermanently(Map<String, dynamic> crop) async {
-    showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Row(
@@ -411,49 +421,11 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-              
-              try {
-                final result = await _apiService.deleteCropPermanent(crop['id']);
-                
-                if (mounted) Navigator.pop(context);
-                
-                if (result['success'] == true) {
-                  await _refreshCrops();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('"${crop['name']}" has been deleted.'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } else {
-                  throw Exception(result['error']);
-                }
-              } catch (e) {
-                if (mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to delete: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
             ),
@@ -462,6 +434,45 @@ class _AllCropsScreenState extends State<AllCropsScreen>
         ],
       ),
     );
+    
+    if (confirm != true) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      final result = await _apiService.deleteCropPermanent(crop['id']);
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (result['success'] == true) {
+        await _refreshCrops();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${crop['name']}" has been deleted.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception(result['error']);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _showManualProgressDialog(Map<String, dynamic> crop) async {
@@ -548,19 +559,21 @@ class _AllCropsScreenState extends State<AllCropsScreen>
                             final result = await _apiService.toggleCropAutoUpdate(crop['id'], value);
                             if (result['success'] == true) {
                               await _refreshCrops();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(value 
-                                    ? 'Auto-update enabled' 
-                                    : 'Auto-update disabled. You can now manually adjust progress.'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(value 
+                                      ? 'Auto-update enabled' 
+                                      : 'Auto-update disabled. You can now manually adjust progress.'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
                             }
                           } catch (e) {
                             print('Error toggling auto-update: $e');
                           }
-                          Navigator.pop(context);
+                          if (mounted) Navigator.pop(context);
                         },
                         activeColor: const Color(0xFF19E6A2),
                       ),
@@ -1600,8 +1613,6 @@ class _AllCropsScreenState extends State<AllCropsScreen>
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 }
-
-
 
 
 
